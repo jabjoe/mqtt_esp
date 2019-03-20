@@ -10,8 +10,7 @@
 #include "driver/gpio.h"
 
 
-int switch1_value=0;
-int switch2_value=0;
+extern int relayStatus[MAX_RELAYS];
 
 int switch1_gpio=0;
 int switch2_gpio=9;
@@ -21,8 +20,7 @@ extern QueueHandle_t relayQueue;
 
 static void gpio1_isr_handler(void *arg)
 {
-  switch1_value = ! switch1_value;
-  struct RelayMessage r={0, switch1_value};
+  struct RelayMessage r={0, !(relayStatus[0] == ON)};
   xQueueSendFromISR(relayQueue
                     ,( void * )&r
                     ,NULL);
@@ -30,8 +28,7 @@ static void gpio1_isr_handler(void *arg)
 
 static void gpio2_isr_handler(void *arg)
 {
-  switch2_value = ! switch2_value;
-  struct RelayMessage r={1, switch2_value};
+  struct RelayMessage r={1, !(relayStatus[1] == ON)};
   xQueueSendFromISR(relayQueue
                     ,( void * )&r
                     ,NULL);

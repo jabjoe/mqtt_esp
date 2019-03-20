@@ -11,13 +11,11 @@
 #include "app_esp8266.h"
 #include "app_relay.h"
 
-#define MAX_RELAYS 4
-
 extern EventGroupHandle_t mqtt_event_group;
 extern const int INIT_FINISHED_BIT;
 
 const int relaysNb = CONFIG_RELAYS_NB;
-static int relayStatus[MAX_RELAYS];
+int relayStatus[MAX_RELAYS];
 
 const int relayToGpioMap[CONFIG_RELAYS_NB] = {12, 5};
 
