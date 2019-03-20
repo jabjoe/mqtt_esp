@@ -2,8 +2,8 @@
 #define APP_ESP8266_H
 
 #define ESP8266
-#define ON 0
-#define OFF 1
+#define ON 1
+#define OFF 0
 
 #define MQTT_TIMEOUT 30
 #define MQTT_FLAG_TIMEOUT (MQTT_TIMEOUT * 1000 / portTICK_PERIOD_MS)

@@ -19,7 +19,7 @@ extern const int INIT_FINISHED_BIT;
 const int relaysNb = CONFIG_RELAYS_NB;
 static int relayStatus[MAX_RELAYS];
 
-const int relayToGpioMap[CONFIG_RELAYS_NB] = {12};
+const int relayToGpioMap[CONFIG_RELAYS_NB] = {12, 5};
 
 static const char *TAG = "MQTTS_RELAY";
 
@@ -81,13 +81,13 @@ void update_relay_state(int id, char value)
 {
   ESP_LOGI(TAG, "update_relay_state: id: %d, value: %d", id, value);
   ESP_LOGI(TAG, "relayStatus[%d] = %d", id, relayStatus[id]);
-  if (value == relayStatus[id]) {
+  if (value != (relayStatus[id] == ON)) {
     //reversed logic
-    if (value == OFF) {
+    if (value == 1) {
       relayStatus[id] = ON;
       ESP_LOGI(TAG, "enabling GPIO %d", relayToGpioMap[id]);
     }
-    if (value == ON) {
+    if (value == 0) {
       relayStatus[id] = OFF;
       ESP_LOGI(TAG, "disabling GPIO %d", relayToGpioMap[id]);
     }
