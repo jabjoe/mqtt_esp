@@ -72,14 +72,14 @@ void blink_task(void *pvParameter)
       interval=500;
     }
 
-    gpio_set_level(BLINK_GPIO, ON);
+    gpio_set_level(BLINK_GPIO, OFF);
 
     bits = xEventGroupGetBits(mqtt_event_group);
     while ( bits & CONNECTED_BIT ) {
       vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
     vTaskDelay(interval / portTICK_PERIOD_MS);
-    gpio_set_level(BLINK_GPIO, OFF);
+    gpio_set_level(BLINK_GPIO, ON);
     vTaskDelay(interval / portTICK_PERIOD_MS);
   }
 }
