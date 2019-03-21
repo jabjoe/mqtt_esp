@@ -71,9 +71,7 @@ void blink_task(void *pvParameter)
     if( ( bits & CONNECTED_BIT ) != 0 ) {
       interval=500;
     }
-
     gpio_set_level(BLINK_GPIO, OFF);
-
     bits = xEventGroupGetBits(mqtt_event_group);
     while ( bits & CONNECTED_BIT ) {
       vTaskDelay(1000 / portTICK_PERIOD_MS);
