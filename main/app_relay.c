@@ -80,7 +80,6 @@ void update_relay_state(int id, char value)
   ESP_LOGI(TAG, "update_relay_state: id: %d, value: %d", id, value);
   ESP_LOGI(TAG, "relayStatus[%d] = %d", id, relayStatus[id]);
   if (value != (relayStatus[id] == ON)) {
-    //reversed logic
     if (value == 1) {
       relayStatus[id] = ON;
       ESP_LOGI(TAG, "enabling GPIO %d", relayToGpioMap[id]);
