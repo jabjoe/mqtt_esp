@@ -19,6 +19,10 @@ enum HoldOffMode {
   HOLD_OFF_ENABLED,
 };
 
+struct ThermostatCmdMessage {
+  enum HoldOffMode holdOffMode;
+};
+
 struct ThermostatCfgMessage {
   short circuitTargetTemperature;
   short waterTargetTemperature;
@@ -26,7 +30,6 @@ struct ThermostatCfgMessage {
   short room0TargetTemperature;
   short room0TemperatureSensibility;
   enum ThermostatMode thermostatMode;
-  enum HoldOffMode holdOffMode;
 };
 
 struct ThermostatSensorsMessage {
@@ -40,14 +43,16 @@ struct ThermostatRoomMessage {
 
 union ThermostatData {
   struct ThermostatCfgMessage cfgData;
+  struct ThermostatCmdMessage cmdData;
   struct ThermostatSensorsMessage sensorsData;
   struct ThermostatRoomMessage roomData;
 };
 
-#define THERMOSTAT_CFG_MSG 1
-#define THERMOSTAT_SENSORS_MSG 2
-#define THERMOSTAT_ROOM_0_MSG 3
-#define THERMOSTAT_LIFE_TICK 4
+#define THERMOSTAT_CMD_MSG 1
+#define THERMOSTAT_CFG_MSG 2
+#define THERMOSTAT_SENSORS_MSG 3
+#define THERMOSTAT_ROOM_0_MSG 4
+#define THERMOSTAT_LIFE_TICK 5
 
 struct ThermostatMessage {
   unsigned char msgType;

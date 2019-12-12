@@ -65,6 +65,18 @@ extern QueueHandle_t thermostatQueue;
 
 static const char *TAG = "APP_THERMOSTAT";
 
+void publish_thermostat_evt()
+{
+  const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/thermostat";
+
+  char data[256];
+  memset(data,0,256);
+  sprintf(data, "{\"holdOffMode\":%d}", holdOffMode);
+  mqtt_publish_data(topic, data, QOS_1, RETAIN);
+
+}
+
+
 void publish_thermostat_cfg()
 {
   const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/thermostat/cfg";
@@ -337,6 +349,16 @@ void handle_thermostat_cmd_task(void* pvParameters)
   while(1) {
     if( xQueueReceive( thermostatQueue, &t , portMAX_DELAY) )
       {
+        if (t.msgType == THERMOSTAT_CMD_MSG) {
+          bool updated = false;
+          if (t.data.cmdData.holdOffMode && holdOffMode != t.data.cmdData.holdOffMode) {
+            holdOffMode=t.data.cmdData.holdOffMode;
+            updated = true;
+          }
+          if (updated) {
+            publish_thermostat_evt();
+          }
+        }
         if (t.msgType == THERMOSTAT_CFG_MSG) {
           bool updated = false;
 #ifdef CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER
@@ -379,11 +401,6 @@ void handle_thermostat_cmd_task(void* pvParameters)
             ESP_ERROR_CHECK( err );
             updated = true;
           }
-          if (t.data.cfgData.holdOffMode && holdOffMode != t.data.cfgData.holdOffMode) {
-            holdOffMode=t.data.cfgData.holdOffMode;
-            updated = true;
-          }
-
           if (updated) {
             publish_thermostat_cfg();
           }

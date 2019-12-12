@@ -63,8 +63,9 @@ extern QueueHandle_t otaQueue;
 
 #include "app_thermostat.h"
 extern QueueHandle_t thermostatQueue;
-#define THERMOSTAT_TOPICS_NB 1
-#define THERMOSTAT_TOPIC CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/cfg/thermostat"
+#define THERMOSTAT_TOPICS_NB 2
+#define CFG_THERMOSTAT_TOPIC CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/cfg/thermostat"
+#define CMD_THERMOSTAT_TOPIC CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/cmd/thermostat"
 
 #else // CONFIG_MQTT_THERMOSTAT
 
@@ -113,7 +114,8 @@ const char *SUBSCRIPTIONS[NB_SUBSCRIPTIONS] =
     RELAY_CFG_TOPIC "+",
 #endif //CONFIG_MQTT_RELAYS_NB
 #ifdef CONFIG_MQTT_THERMOSTAT
-    THERMOSTAT_TOPIC,
+    CFG_THERMOSTAT_TOPIC,
+    CMD_THERMOSTAT_TOPIC,
 #endif // CONFIG_MQTT_THERMOSTAT
 #if CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB
     CONFIG_MQTT_THERMOSTAT_ROOM_0_SENSORS_TOPIC,
@@ -316,13 +318,54 @@ bool getTemperatureValue(short* value, const cJSON* root, const char* tag)
   return false;
 }
 
-bool handle_thermostat_mqtt_event(esp_mqtt_event_handle_t event)
+bool handle_cmd_thermostat_mqtt_event(esp_mqtt_event_handle_t event)
 {
 #ifdef CONFIG_MQTT_THERMOSTAT
-  if (strncmp(event->topic, THERMOSTAT_TOPIC, strlen(THERMOSTAT_TOPIC)) == 0) {
+  if (strncmp(event->topic, CMD_THERMOSTAT_TOPIC, strlen(CMD_THERMOSTAT_TOPIC)) == 0) {
     if (event->data_len >= MAX_MQTT_DATA_THERMOSTAT )
       {
         ESP_LOGI(TAG, "unexpected thermostat cmd payload length");
+        return true;
+      }
+    char tmpBuf[MAX_MQTT_DATA_THERMOSTAT];
+    memcpy(tmpBuf, event->data, event->data_len);
+    tmpBuf[event->data_len] = 0;
+    cJSON * root   = cJSON_Parse(tmpBuf);
+    if (root) {
+      struct ThermostatMessage tm;
+      memset(&tm, 0, sizeof(struct ThermostatMessage));
+      tm.msgType = THERMOSTAT_CMD_MSG;
+      bool updated = false;
+
+      cJSON * holdOffMode = cJSON_GetObjectItem(root,"holdOffMode");
+      if (holdOffMode) {
+        tm.data.cmdData.holdOffMode = holdOffMode->valueint;
+        ESP_LOGI(TAG, "holdOffMode: %d", tm.data.cmdData.holdOffMode);
+        updated = true;
+      }
+
+      if (updated) {
+        if (xQueueSend( thermostatQueue
+                        ,( void * )&tm
+                        ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
+          ESP_LOGE(TAG, "Cannot send to thermostatQueue");
+        }
+      }
+      cJSON_Delete(root);
+    }
+    return true;
+  }
+#endif // CONFIG_MQTT_THERMOSTAT
+  return false;
+}
+
+bool handle_cfg_thermostat_mqtt_event(esp_mqtt_event_handle_t event)
+{
+#ifdef CONFIG_MQTT_THERMOSTAT
+  if (strncmp(event->topic, CFG_THERMOSTAT_TOPIC, strlen(CFG_THERMOSTAT_TOPIC)) == 0) {
+    if (event->data_len >= MAX_MQTT_DATA_THERMOSTAT )
+      {
+        ESP_LOGI(TAG, "unexpected thermostat cfg payload length");
         return true;
       }
     char tmpBuf[MAX_MQTT_DATA_THERMOSTAT];
@@ -359,13 +402,6 @@ bool handle_thermostat_mqtt_event(esp_mqtt_event_handle_t event)
       if (tmMode) {
         tm.data.cfgData.thermostatMode = tmMode->valueint;
         ESP_LOGI(TAG, "thermostatMode: %d", tm.data.cfgData.thermostatMode);
-        updated = true;
-      }
-
-      cJSON * holdOffMode = cJSON_GetObjectItem(root,"holdOffMode");
-      if (holdOffMode) {
-        tm.data.cfgData.holdOffMode = holdOffMode->valueint;
-        ESP_LOGI(TAG, "holdOffMode: %d", tm.data.cfgData.holdOffMode);
         updated = true;
       }
 
@@ -430,7 +466,9 @@ void dispatch_mqtt_event(esp_mqtt_event_handle_t event)
     return;
   if (handle_ota_mqtt_event(event))
     return;
-  if (handle_thermostat_mqtt_event(event))
+  if (handle_cmd_thermostat_mqtt_event(event))
+    return;
+  if (handle_cfg_thermostat_mqtt_event(event))
     return;
 }
 
