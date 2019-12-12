@@ -2,22 +2,24 @@
 #define APP_SCHEDULER_H
 
 #include "app_relay.h"
+#include "app_thermostat.h"
 
 void start_scheduler_timer(void);
 void handle_scheduler(void* pvParameters);
 
 #define RELAY_ACTION 1
-#define ADD_RELAY_ACTION 1
+#define THERMOSTAT_ACTION 2
 #define TRIGGER_ACTION 255
 #define MAX_SCHEDULER_NB 8
 
-#define ACTION_STATE_DISABLED 0
-#define ACTION_STATE_ENABLED 1
+#define ACTION_STATE_DISABLED 1
+#define ACTION_STATE_ENABLED 2
 
 //FIXME basic structure only
 
 union Data {
   struct RelayCmdMessage relayActionData;
+  struct ThermostatCmdMessage thermostatActionData;
   struct TriggerData {time_t now;} triggerActionData;
 };
 
