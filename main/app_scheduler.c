@@ -95,27 +95,22 @@ void log_scheduler(const struct SchedulerCfgMessage *msg)
   }
 }
 
-void handle_relay_action_trigger(struct SchedulerCfgMessage *msg, int nowMinutes) {
-  int schedulerMinutes = msg->timestamp / 60;
-  ESP_LOGI(TAG, "schedulerMinutes: %d", schedulerMinutes);
-
-  if (schedulerMinutes == nowMinutes ||
-      schedulerMinutes == (nowMinutes - 1)) {
-    ESP_LOGI(TAG, "Executing scheduleId: %d",
-             msg->schedulerId);
+void handle_relay_action_trigger(struct SchedulerCfgMessage *msg) {
     struct RelayCmdMessage r=msg->data.relayActionData;
     if (xQueueSend( relayCmdQueue,
                     ( void * )&r,
                     RELAY_QUEUE_TIMEOUT) != pdPASS) {
       ESP_LOGE(TAG, "Cannot send to relayCmdQueue");
     }
-  }
+}
 
-  if (schedulerMinutes <= nowMinutes) {
-    ESP_LOGI(TAG, "Disabling scheduleId: %d",
-             msg->schedulerId);
-    msg->actionState = ACTION_STATE_DISABLED;
-  }
+void handle_thermostat_action_trigger(struct SchedulerCfgMessage *msg) {
+    struct ThermostatCmdMessage t=msg->data.thermostatActionData;
+    if (xQueueSend( relayCmdQueue,
+                    ( void * )&t,
+                    RELAY_QUEUE_TIMEOUT) != pdPASS) {
+      ESP_LOGE(TAG, "Cannot send to thermostatCmdQueue");
+    }
 }
 
 
@@ -123,9 +118,27 @@ void handle_action_trigger(struct SchedulerCfgMessage *schedulerCfg, int nowMinu
 {
   for (int i = 0; i < MAX_SCHEDULER_NB; ++i) {
     log_scheduler(&schedulerCfg[i]);
-    if (schedulerCfg[i].actionId    == RELAY_ACTION &&
-        schedulerCfg[i].actionState == ACTION_STATE_ENABLED) {
-      handle_relay_action_trigger(&schedulerCfg[i], nowMinutes);
+    if (schedulerCfg[i].actionState == ACTION_STATE_ENABLED) {
+      int schedulerMinutes = schedulerCfg[i].timestamp / 60;
+      ESP_LOGI(TAG, "schedulerMinutes: %d", schedulerMinutes);
+      if (schedulerMinutes == nowMinutes ||
+          schedulerMinutes == (nowMinutes - 1)) {
+        ESP_LOGI(TAG, "Executing scheduleId: %d",
+                 schedulerCfg[i].schedulerId);
+
+        if (schedulerCfg[i].actionId == RELAY_ACTION) {
+          handle_relay_action_trigger(&schedulerCfg[i]);
+        }
+        if (schedulerCfg[i].actionId == THERMOSTAT_ACTION) {
+          handle_thermostat_action_trigger(&schedulerCfg[i]);
+        }
+
+        if (schedulerMinutes <= nowMinutes) {
+          ESP_LOGI(TAG, "Disabling scheduleId: %d",
+                   schedulerCfg[i].schedulerId);
+          schedulerCfg[i].actionState = ACTION_STATE_DISABLED;
+        }
+      }
     }
   }
 }
@@ -152,11 +165,13 @@ void handle_scheduler(void* pvParameters)
         int nowMinutes =  tempSchedulerCfg.data.triggerActionData.now/ 60;
         ESP_LOGI(TAG, "nowMinutes: %d", nowMinutes);
         handle_action_trigger(schedulerCfg, nowMinutes);
-      } else if (tempSchedulerCfg.actionId == ADD_RELAY_ACTION) {
+      } else if (tempSchedulerCfg.actionId == RELAY_ACTION ||
+                 tempSchedulerCfg.actionId == THERMOSTAT_ACTION) {
         if (tempSchedulerCfg.schedulerId < MAX_SCHEDULER_NB) {
           ESP_LOGI(TAG, "Updating schedulerId: %d",
                    tempSchedulerCfg.schedulerId);
           schedulerCfg[tempSchedulerCfg.schedulerId] = tempSchedulerCfg;
+          //FIXME should publish scheduler
         } else {
               ESP_LOGE(TAG, "Wrong schedulerId: %d",
                        tempSchedulerCfg.schedulerId);

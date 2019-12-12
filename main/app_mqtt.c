@@ -205,18 +205,18 @@ bool handle_scheduler_mqtt_event(esp_mqtt_event_handle_t event)
       if (actionState) {
         s.actionState = actionState->valueint;
       }
-      cJSON * data = cJSON_GetObjectItem(root,"data");
-      if (data) {
-        if (s.actionId == ADD_RELAY_ACTION) {
-          cJSON * relayId = cJSON_GetObjectItem(data,"relayId");
-          if (relayId) {
-            s.data.relayActionData.relayId = relayId->valueint;
-          }
-          cJSON * relayValue = cJSON_GetObjectItem(data,"relayValue");
-          if (relayValue) {
-            s.data.relayActionData.relayValue = relayValue->valueint;
-          }
+      if (s.actionId == RELAY_ACTION) {
+        cJSON * relayId = cJSON_GetObjectItem(root,"relayId");
+        if (relayId) {
+          s.data.relayActionData.relayId = relayId->valueint;
         }
+        cJSON * relayValue = cJSON_GetObjectItem(root,"relayValue");
+        if (relayValue) {
+          s.data.relayActionData.relayValue = relayValue->valueint;
+        }
+      } else if(s.actionId == THERMOSTAT_ACTION) {
+        cJSON * holdOffMode = cJSON_GetObjectItem(root,"holdOffMode");
+        s.data.thermostatActionData.holdOffMode = holdOffMode->valueint;
       }
       cJSON_Delete(root);
 
