@@ -18,9 +18,18 @@ enum HoldOffMode {
   HOLD_OFF_DISABLED = 1,
   HOLD_OFF_ENABLED,
 };
+enum ThermostatState {
+  THERMOSTAT_STATE_ON = 1,
+  THERMOSTAT_STATE_OFF,
 
+};
 struct ThermostatCmdMessage {
   enum HoldOffMode holdOffMode;
+  enum ThermostatState thermostatState;
+};
+
+struct TemperatureCmdMessage {
+  short temperature;
 };
 
 struct ThermostatCfgMessage {

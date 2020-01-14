@@ -91,7 +91,7 @@ void publish_thermostat_cfg()
   sprintf(tstr, "\"circuitTargetTemperature\":%d.%01d,\"waterTargetTemperature\":%d.%01d,\"waterTemperatureSensibility\":%d.%01d",
           circuitTargetTemperature/10, circuitTargetTemperature%10,
           waterTargetTemperature/10, waterTargetTemperature%10,
-          waterTemperatureSensibility/10, waterTemperatureSensibility%10)
+          waterTemperatureSensibility/10, waterTemperatureSensibility%10);
   strcat(data, tstr);
 #endif //CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER
 
@@ -121,7 +121,7 @@ void publish_thermostat_state(const char* reason, unsigned int duration)
   strcat(data, tstr);
   
 #ifdef CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER
-  sprintf(tstr, "\"heatingState\":%d,", heatingEnabled)
+  sprintf(tstr, "\"heatingState\":%d,", heatingEnabled);
   strcat(data, tstr);
 #endif //CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER
 
@@ -444,7 +444,7 @@ void read_nvs_thermostat_data()
 {
   esp_err_t err;
 #ifdef CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER
-  esp_err_t err=read_nvs_short(circuitTargetTemperatureTAG, &circuitTargetTemperature);
+  err=read_nvs_short(circuitTargetTemperatureTAG, &circuitTargetTemperature);
   ESP_ERROR_CHECK( err );
 
   err=read_nvs_short(waterTargetTemperatureTAG, &waterTargetTemperature);

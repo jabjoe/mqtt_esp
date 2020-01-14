@@ -9,7 +9,9 @@ void handle_scheduler(void* pvParameters);
 
 #define RELAY_ACTION 1
 #define THERMOSTAT_ACTION 2
+#define TEMPERATURE_ACTION 3
 #define TRIGGER_ACTION 255
+
 #define MAX_SCHEDULER_NB 8
 
 #define ACTION_STATE_DISABLED 1
@@ -20,6 +22,7 @@ void handle_scheduler(void* pvParameters);
 union Data {
   struct RelayCmdMessage relayActionData;
   struct ThermostatCmdMessage thermostatActionData;
+  struct TemperatureCmdMessage tempActionData;
   struct TriggerData {time_t now;} triggerActionData;
 };
 

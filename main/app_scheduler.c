@@ -18,6 +18,7 @@
 static const char *TAG = "SCHEDULER";
 extern QueueHandle_t schedulerCfgQueue;
 extern QueueHandle_t relayCmdQueue;
+extern QueueHandle_t thermostatQueue;
 
 void update_time_from_ntp()
 {
@@ -96,23 +97,32 @@ void log_scheduler(const struct SchedulerCfgMessage *msg)
 }
 
 void handle_relay_action_trigger(struct SchedulerCfgMessage *msg) {
-    struct RelayCmdMessage r=msg->data.relayActionData;
-    if (xQueueSend( relayCmdQueue,
-                    ( void * )&r,
-                    RELAY_QUEUE_TIMEOUT) != pdPASS) {
-      ESP_LOGE(TAG, "Cannot send to relayCmdQueue");
-    }
+  struct RelayCmdMessage r=msg->data.relayActionData;
+  if (xQueueSend( relayCmdQueue,
+                  ( void * )&r,
+                  RELAY_QUEUE_TIMEOUT) != pdPASS) {
+    ESP_LOGE(TAG, "Cannot send to relayCmdQueue");
+  }
 }
 
 void handle_thermostat_action_trigger(struct SchedulerCfgMessage *msg) {
-    struct ThermostatCmdMessage t=msg->data.thermostatActionData;
-    if (xQueueSend( relayCmdQueue,
-                    ( void * )&t,
-                    RELAY_QUEUE_TIMEOUT) != pdPASS) {
-      ESP_LOGE(TAG, "Cannot send to thermostatCmdQueue");
-    }
+  struct ThermostatCmdMessage t=msg->data.thermostatActionData;
+  if (xQueueSend( thermostatQueue,
+                  ( void * )&t,
+                  RELAY_QUEUE_TIMEOUT) != pdPASS) {
+    ESP_LOGE(TAG, "Cannot send to thermostatCmdQueue");
+  }
 }
 
+void handle_temperature_action_trigger(struct SchedulerCfgMessage *msg) {
+
+  struct TemperatureCmdMessage t=msg->data.tempActionData;
+  if (xQueueSend( thermostatQueue,
+                  ( void * )&t,
+                  RELAY_QUEUE_TIMEOUT) != pdPASS) {
+    ESP_LOGE(TAG, "Cannot send to thermostatCmdQueue");
+  }
+}
 
 void handle_action_trigger(struct SchedulerCfgMessage *schedulerCfg, int nowMinutes)
 {
@@ -131,6 +141,10 @@ void handle_action_trigger(struct SchedulerCfgMessage *schedulerCfg, int nowMinu
         }
         if (schedulerCfg[i].actionId == THERMOSTAT_ACTION) {
           handle_thermostat_action_trigger(&schedulerCfg[i]);
+        }
+
+        if (schedulerCfg[i].actionId == TEMPERATURE_ACTION) {
+          handle_temperature_action_trigger(&schedulerCfg[i]);
         }
 
         if (schedulerMinutes <= nowMinutes) {
