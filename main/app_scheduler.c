@@ -142,7 +142,6 @@ void handle_action_trigger(struct SchedulerCfgMessage *schedulerCfg, int nowMinu
         if (schedulerCfg[i].actionId == THERMOSTAT_ACTION) {
           handle_thermostat_action_trigger(&schedulerCfg[i]);
         }
-
         if (schedulerCfg[i].actionId == TEMPERATURE_ACTION) {
           handle_temperature_action_trigger(&schedulerCfg[i]);
         }
