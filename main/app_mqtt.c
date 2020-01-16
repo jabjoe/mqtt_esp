@@ -86,7 +86,7 @@ const int MQTT_INIT_FINISHED_BIT = BIT3;
 
 int mqtt_reconnect_counter;
 
-#define FW_VERSION "0.02.12m"
+#define FW_VERSION "0.02.12n"
 
 extern QueueHandle_t mqttQueue;
 
@@ -95,7 +95,7 @@ static const char *TAG = "MQTTS_MQTTS";
 
 #define NB_SUBSCRIPTIONS  (OTA_TOPICS_NB + THERMOSTAT_TOPICS_NB + RELAYS_TOPICS_NB + SCHEDULER_TOPICS_NB + CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB)
 
-#define RELAY_CMD_TOPIC CONFIG_MQTT_DEVICE_TYPE"/"CONFIG_MQTT_CLIENT_ID"/cmd/relay/"
+#define RELAY_CMD_TOPIC CONFIG_MQTT_DEVICE_TYPE"/"CONFIG_MQTT_CLIENT_ID"/cmd/+/relay/"
 
 #define RELAY_CFG_TOPIC CONFIG_MQTT_DEVICE_TYPE"/"CONFIG_MQTT_CLIENT_ID"/cfg/relay/"
 
@@ -154,6 +154,66 @@ unsigned char get_topic_id(esp_mqtt_event_handle_t event, int maxTopics, const c
   }
   return topicId;
 }
+
+const char* getToken(const char* topic, unsigned char place)
+{
+  if (topic == NULL)
+    return NULL;
+
+  if (strlen(topic) >= 64)
+    return NULL;
+  char str[64];
+  strcpy(str, topic);
+
+  char *token = strtok(str, "/");
+  int i = 0;
+    while(i < place && token) {
+      token = strtok(NULL, "/");
+      i += 1;
+    }
+  return token;
+}
+
+const char* getAction(const char* topic)
+{
+  return getToken(topic, 3);
+}
+
+const char* getService(const char* topic)
+{
+  return getToken(topic, 4);
+}
+
+char getServiceId(const char* topic)
+{
+  char serviceId=-1;
+  const char* s = getToken(topic, 5);
+  if (s) {
+    serviceId = atoi(s);
+  }
+  return serviceId;
+}
+
+/* unsigned char get_action(char* action, esp_mqtt_event_handle_t event) */
+/* { */
+/*   char fullTopic[MQTT_MAX_TOPIC_LEN]; */
+/*   memset(fullTopic,0,MQTT_MAX_TOPIC_LEN); */
+
+/*   unsigned char topicId = 0; */
+/*   bool found = false; */
+/*   while (!found && topicId <= maxTopics) { */
+/*     sprintf(fullTopic, "%s%d", topic, topicId); */
+/*     if (strncmp(event->topic, fullTopic, strlen(fullTopic)) == 0) { */
+/*       found = true; */
+/*     } else { */
+/*       topicId++; */
+/*     } */
+/*   } */
+/*   if (!found) { */
+/*     topicId = JSON_BAD_TOPIC_ID; */
+/*   } */
+/*   return topicId; */
+/* } */
 
 char get_relay_json_value(const char* tag, esp_mqtt_event_handle_t event)
 {
@@ -456,13 +516,15 @@ bool handle_room_sensors_mqtt_event(esp_mqtt_event_handle_t event)
 }
 void dispatch_mqtt_event(esp_mqtt_event_handle_t event)
 {
-  if (handle_scheduler_mqtt_event(event))
-    return;
-  if (handle_room_sensors_mqtt_event(event))
-    return;
+  //const char* service = getService(event->topic);
   if (handle_relay_cfg_mqtt_event(event))
     return;
   if (handle_relay_cmd_mqtt_event(event))
+    return;
+
+  if (handle_scheduler_mqtt_event(event))
+    return;
+  if (handle_room_sensors_mqtt_event(event))
     return;
   if (handle_ota_mqtt_event(event))
     return;
