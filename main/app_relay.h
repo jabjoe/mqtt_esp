@@ -1,29 +1,38 @@
 #ifndef APP_RELAY_H
 #define APP_RELAY_H
 
-struct RelayCmdMessage
-{
-    unsigned char relayId;
-    unsigned char relayValue;
+
+enum RelayState {
+  RELAY_STATE_UNSET=0,
+  RELAY_STATE_ON   =1,
+  RELAY_STATE_OFF  =2
 };
 
-struct RelayCfgMessage
+union RelayData
 {
-    unsigned char relayId;
-    unsigned char onTimeout;
+  enum RelayState state;
+  unsigned char timeout;
 };
 
-void publish_all_relays_data();
-void publish_relay_data(int id);
+struct RelayMessage {
+  unsigned char msgType;
+  char relayId;
+  union RelayData data;
+};
 
-void publish_all_relays_cfg_data();
+#define RELAY_STATE_CMD 1
+#define RELAY_TIMEOUT_CMD 2
+
+
+void publish_all_relays_status();
+void publish_relay_status(int id);
+
+void publish_all_relays_timeout();
 
 
 void relays_init(void);
 
 void handle_relay_cmd_task(void* pvParameters);
-void handle_relay_cfg_task(void* pvParameters);
-void update_relay_state(int id, char value);
 
 #define RELAY_TIMEOUT 30
 #define RELAY_QUEUE_TIMEOUT (RELAY_TIMEOUT * 1000 / portTICK_PERIOD_MS)

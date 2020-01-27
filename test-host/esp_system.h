@@ -11,7 +11,5 @@
 #define CONFIG_MQTT_SERVER "mqtt.server"
 #define CONFIG_MQTT_PORT "12345"
 
-
-
 int esp_get_free_heap_size();
 

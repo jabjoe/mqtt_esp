@@ -32,10 +32,6 @@ struct TemperatureCmdMessage {
   short temperature;
 };
 
-struct ThermostatCmdMessage {
-  enum HoldOffMode holdOffMode;
-};
-
 struct ThermostatCfgMessage {
   short circuitTargetTemperature;
   short waterTargetTemperature;

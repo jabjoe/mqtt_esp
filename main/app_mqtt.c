@@ -6,7 +6,8 @@
 #include "freertos/event_groups.h"
 #include "freertos/queue.h"
 
-#include "string.h"
+#include <string.h>
+#include <stdlib.h>
 
 #include "mqtt_client.h"
 
@@ -36,9 +37,10 @@ extern struct SchedulerCfgMessage schedulerCfg;
 #if CONFIG_MQTT_RELAYS_NB
 #include "app_relay.h"
 extern QueueHandle_t relayCmdQueue;
-extern QueueHandle_t relayCfgQueue;
 
-#define RELAYS_TOPICS_NB 2 //CMD and CFG
+#define RELAY_SERVICE "relay"
+
+#define RELAYS_TOPICS_NB 1 //CMD and CFG
 
 #else //CONFIG_MQTT_RELAYS_NB
 
@@ -74,9 +76,8 @@ extern QueueHandle_t thermostatQueue;
 #endif // CONFIG_MQTT_THERMOSTAT
 
 esp_mqtt_client_handle_t client = NULL;
-int connect_reason;
-const int mqtt_disconnect = 33; //32+1
-const char * connect_topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/connection";
+
+const char * available_topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/state/available";
 
 EventGroupHandle_t mqtt_event_group;
 const int MQTT_CONNECTED_BIT = BIT0;
@@ -86,11 +87,11 @@ const int MQTT_INIT_FINISHED_BIT = BIT3;
 
 int mqtt_reconnect_counter;
 
-#define FW_VERSION "0.02.12n"
+#define FW_VERSION "0.02.12n2"
 
 extern QueueHandle_t mqttQueue;
 
-static const char *TAG = "MQTTS_MQTTS";
+static const char *TAG = "MQTTS_MQTT";
 
 
 #define NB_SUBSCRIPTIONS  (OTA_TOPICS_NB + THERMOSTAT_TOPICS_NB + RELAYS_TOPICS_NB + SCHEDULER_TOPICS_NB + CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB)
@@ -111,7 +112,6 @@ const char *SUBSCRIPTIONS[NB_SUBSCRIPTIONS] =
 #endif // CONFIG_MQTT_SCHEDULERS
 #if CONFIG_MQTT_RELAYS_NB
     RELAY_CMD_TOPIC "+",
-    RELAY_CFG_TOPIC "+",
 #endif //CONFIG_MQTT_RELAYS_NB
 #ifdef CONFIG_MQTT_THERMOSTAT
     CFG_THERMOSTAT_TOPIC,
@@ -155,65 +155,53 @@ unsigned char get_topic_id(esp_mqtt_event_handle_t event, int maxTopics, const c
   return topicId;
 }
 
-const char* getToken(const char* topic, unsigned char place)
+char* getToken(char* buffer, const char* topic, unsigned char place)
 {
   if (topic == NULL)
     return NULL;
 
   if (strlen(topic) >= 64)
     return NULL;
+
   char str[64];
   strcpy(str, topic);
 
   char *token = strtok(str, "/");
   int i = 0;
-    while(i < place && token) {
-      token = strtok(NULL, "/");
-      i += 1;
-    }
-  return token;
+  while(i < place && token) {
+    token = strtok(NULL, "/");
+    i += 1;
+  }
+  if (!token)
+    return NULL;
+
+  return strcpy(buffer, token);
 }
 
-const char* getAction(const char* topic)
+char* getActionType(char* actionType, const char* topic)
 {
-  return getToken(topic, 3);
+  return getToken(actionType, topic, 2);
+}
+char* getAction(char* action, const char* topic)
+{
+  return getToken(action, topic, 3);
 }
 
-const char* getService(const char* topic)
+char* getService(char* service, const char* topic)
 {
-  return getToken(topic, 4);
+  return getToken(service, topic, 4);
 }
 
-char getServiceId(const char* topic)
+signed char getServiceId(const char* topic)
 {
-  char serviceId=-1;
-  const char* s = getToken(topic, 5);
+  signed char serviceId=-1;
+  char buffer[8];
+  char* s = getToken(buffer, topic, 5);
   if (s) {
     serviceId = atoi(s);
   }
   return serviceId;
 }
-
-/* unsigned char get_action(char* action, esp_mqtt_event_handle_t event) */
-/* { */
-/*   char fullTopic[MQTT_MAX_TOPIC_LEN]; */
-/*   memset(fullTopic,0,MQTT_MAX_TOPIC_LEN); */
-
-/*   unsigned char topicId = 0; */
-/*   bool found = false; */
-/*   while (!found && topicId <= maxTopics) { */
-/*     sprintf(fullTopic, "%s%d", topic, topicId); */
-/*     if (strncmp(event->topic, fullTopic, strlen(fullTopic)) == 0) { */
-/*       found = true; */
-/*     } else { */
-/*       topicId++; */
-/*     } */
-/*   } */
-/*   if (!found) { */
-/*     topicId = JSON_BAD_TOPIC_ID; */
-/*   } */
-/*   return topicId; */
-/* } */
 
 char get_relay_json_value(const char* tag, esp_mqtt_event_handle_t event)
 {
@@ -267,12 +255,13 @@ bool handle_scheduler_mqtt_event(esp_mqtt_event_handle_t event)
       }
       if (s.actionId == RELAY_ACTION) {
         cJSON * relayId = cJSON_GetObjectItem(root,"relayId");
+        s.data.relayActionData.msgType = RELAY_STATE_CMD;
         if (relayId) {
           s.data.relayActionData.relayId = relayId->valueint;
         }
         cJSON * relayValue = cJSON_GetObjectItem(root,"relayValue");
         if (relayValue) {
-          s.data.relayActionData.relayValue = relayValue->valueint;
+          s.data.relayActionData.data.state = relayValue->valueint;
         }
       } else if(s.actionId == THERMOSTAT_ACTION) {
         cJSON * holdOffMode = cJSON_GetObjectItem(root,"holdOffMode");
@@ -292,63 +281,80 @@ bool handle_scheduler_mqtt_event(esp_mqtt_event_handle_t event)
   return false;
 }
 
-bool handle_relay_cfg_mqtt_event(esp_mqtt_event_handle_t event)
-{
 #if CONFIG_MQTT_RELAYS_NB
-  unsigned char relayId = get_topic_id(event, CONFIG_MQTT_RELAYS_NB, RELAY_CFG_TOPIC);
-  if(relayId != JSON_BAD_TOPIC_ID) {
-    if (event->data_len >= MAX_MQTT_DATA_LEN_RELAY) {
-      ESP_LOGI(TAG, "unexpected relay cfg payload length");
-      return true;
-    }
-    char value = get_relay_json_value("onTimeout", event);
-    if (value != JSON_BAD_RELAY_VALUE) {
-      ESP_LOGI(TAG, "relayId: %d, onTimeout: %d", relayId, value);
-      struct RelayCfgMessage r={relayId, value};
-      if (xQueueSend( relayCfgQueue
-                      ,( void * )&r
-                      ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
-        ESP_LOGE(TAG, "Cannot send to relayCfgQueue");
-      }
-    }
-    else {
-      ESP_LOGE(TAG, "bad json payload");
-    }
-    return true;
+
+void handle_relay_mqtt_timeout_cmd(char relayId, const char *payload)
+{
+  struct RelayMessage r;
+  memset(&r, 0, sizeof(struct RelayMessage));
+  r.msgType = RELAY_TIMEOUT_CMD;
+  r.relayId = relayId;
+  r.data.timeout = atoi(payload);
+
+  if (xQueueSend( relayCmdQueue
+                  ,( void * )&r
+                  ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
+    ESP_LOGE(TAG, "Cannot send to relayCmdQueue");
   }
-#endif //CONFIG_MQTT_RELAYS_NB
-  return false;
 }
 
-
-
-bool handle_relay_cmd_mqtt_event(esp_mqtt_event_handle_t event)
+void handle_relay_mqtt_state_cmd(char relayId, const char *payload)
 {
-#if CONFIG_MQTT_RELAYS_NB
-  unsigned char relayId = get_topic_id(event, CONFIG_MQTT_RELAYS_NB, RELAY_CMD_TOPIC);
-  if(relayId != JSON_BAD_TOPIC_ID) {
-    if (event->data_len >= MAX_MQTT_DATA_LEN_RELAY) {
-      ESP_LOGI(TAG, "unexpected relay cmd payload length");
-      return true;
-    }
-    char value = get_relay_json_value("state", event);
-    if (value != JSON_BAD_RELAY_VALUE) {
-      ESP_LOGI(TAG, "relayId: %d, value: %d", relayId, value);
-      struct RelayCmdMessage r={relayId, value};
-      if (xQueueSend( relayCmdQueue
-                      ,( void * )&r
-                      ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
-        ESP_LOGE(TAG, "Cannot send to relayCmdQueue");
-      }
-    }
-    else {
-      ESP_LOGE(TAG, "bad json payload");
-    }
-    return true;
+  struct RelayMessage r;
+  memset(&r, 0, sizeof(struct RelayMessage));
+  r.msgType = RELAY_STATE_CMD;
+  r.relayId = relayId;
+
+  if (strcmp(payload, "ON") == 0)
+    r.data.state = RELAY_STATE_ON;
+  else if (strcmp(payload, "OFF") == 0)
+    r.data.state = RELAY_STATE_OFF;
+
+  if (r.data.state == RELAY_STATE_UNSET) {
+    ESP_LOGE(TAG, "wrong payload");
+    return;
   }
-#endif //CONFIG_MQTT_RELAYS_NB
-  return false;
+
+  if (xQueueSend( relayCmdQueue
+                  ,( void * )&r
+                  ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
+    ESP_LOGE(TAG, "Cannot send to relayCmdQueue");
+  }
 }
+void handle_relay_mqtt_cmd(esp_mqtt_event_handle_t event)
+{
+  signed char relayId = getServiceId(event->topic);
+  if (relayId == -1) {
+    ESP_LOGE(TAG, "wrong relay id");
+    return;
+  }
+
+  char payload[16];
+  //FIXME this check should be generic and 16 should get a define
+  if (event->data_len > 16 - 1) { //including '\0'
+    ESP_LOGE(TAG, "payload to big");
+    return;
+  }
+
+  memcpy(payload, event->data, event->data_len);
+  payload[event->data_len] = 0;
+
+  char action[16];
+  getAction(action, event->topic);
+  if (strcmp(action, "state") == 0) {
+    handle_relay_mqtt_state_cmd(relayId, payload);
+    return;
+  }
+  if (strcmp(action, "timeout") == 0) {
+    handle_relay_mqtt_timeout_cmd(relayId, payload);
+    return;
+  }
+  ESP_LOGW(TAG, "unhlandled relay cmd: %s", action);
+
+
+}
+#endif //CONFIG_MQTT_RELAYS_NB
+
 
 bool handle_ota_mqtt_event(esp_mqtt_event_handle_t event)
 {
@@ -514,14 +520,27 @@ bool handle_room_sensors_mqtt_event(esp_mqtt_event_handle_t event)
 #endif // MQTT_THERMOSTAT_ROOMS_SENSORS_NB > 0
   return false;
 }
-void dispatch_mqtt_event(esp_mqtt_event_handle_t event)
+void dispatch_mqtt_event(const esp_mqtt_event_handle_t event)
 {
-  //const char* service = getService(event->topic);
-  if (handle_relay_cfg_mqtt_event(event))
-    return;
-  if (handle_relay_cmd_mqtt_event(event))
-    return;
+  char actionType[16];
+  if (getActionType(actionType, event->topic) && strcmp(actionType, "cmd") == 0) {
+    //handle cmd action
+    //FIXME refactor in separate function
+    char service[16];
+    getService(service, event->topic);
 
+#if CONFIG_MQTT_RELAYS_NB
+    //FIXME should be RELAY_SERVICE
+    if (getService(service, event->topic) && strcmp(service, "relay") == 0) {
+      handle_relay_mqtt_cmd(event);
+      return;
+    }
+#endif //CONFIG_MQTT_RELAYS_NB
+
+    ESP_LOGI(TAG, "unhandled service %s", service);
+  }
+
+  //old code
   if (handle_scheduler_mqtt_event(event))
     return;
   if (handle_room_sensors_mqtt_event(event))
@@ -557,14 +576,19 @@ void mqtt_publish_data(const char * topic,
   }
 }
 
-void publish_connected_data()
+void publish_online_availability()
 {
-  char data[256];
-  memset(data,0,256);
+  char* data = "online";
+  mqtt_publish_data(available_topic, data, QOS_1, RETAIN);
+}
 
-  sprintf(data, "{\"state\":\"connected\", \"v\":\"" FW_VERSION "\", \"connect_reason\":%d}", connect_reason);
 
-  mqtt_publish_data(connect_topic, data, QOS_1, RETAIN);
+void publish_fw_version()
+{
+  const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/version/firmware";
+
+  char* data = FW_VERSION;
+  mqtt_publish_data(topic, data, QOS_1, RETAIN);
 }
 
 
@@ -584,7 +608,6 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     break;
   case MQTT_EVENT_DISCONNECTED:
     ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
-    connect_reason=mqtt_disconnect;
     xEventGroupClearBits(mqtt_event_group, MQTT_CONNECTED_BIT | MQTT_SUBSCRIBED_BIT | MQTT_PUBLISHED_BIT | MQTT_INIT_FINISHED_BIT);
     mqtt_reconnect_counter += 1; //one reconnect each 10 seconds
     ESP_LOGI(TAG, "mqtt_reconnect_counter: %d", mqtt_reconnect_counter);
@@ -644,13 +667,13 @@ static void mqtt_subscribe(esp_mqtt_client_handle_t client)
 
 void mqtt_init_and_start()
 {
-  const char * lwtmsg = "{\"state\":\"disconnected\"}";
+  const char * lwtmsg = "offline";
   const esp_mqtt_client_config_t mqtt_cfg = {
     .uri = "mqtts://" CONFIG_MQTT_USERNAME ":" CONFIG_MQTT_PASSWORD "@" CONFIG_MQTT_SERVER ":" CONFIG_MQTT_PORT,
     .event_handle = mqtt_event_handler,
     .cert_pem = (const char *)mqtt_iot_cipex_ro_pem_start,
     .client_id = CONFIG_MQTT_CLIENT_ID,
-    .lwt_topic = connect_topic,
+    .lwt_topic = available_topic,
     .lwt_msg = lwtmsg,
     .lwt_qos = 1,
     .lwt_retain = 1,
@@ -666,7 +689,6 @@ void mqtt_init_and_start()
 
 void handle_mqtt_sub_pub(void* pvParameters)
 {
-  connect_reason=esp_reset_reason();
   void * unused;
   while(1) {
     if( xQueueReceive( mqttQueue, &unused , portMAX_DELAY) )
@@ -674,10 +696,11 @@ void handle_mqtt_sub_pub(void* pvParameters)
         xEventGroupClearBits(mqtt_event_group, MQTT_INIT_FINISHED_BIT);
         mqtt_subscribe(client);
         xEventGroupSetBits(mqtt_event_group, MQTT_INIT_FINISHED_BIT);
-        publish_connected_data();
+        publish_online_availability();
+        publish_fw_version();
 #if CONFIG_MQTT_RELAYS_NB
-        publish_all_relays_data();
-        publish_all_relays_cfg_data();
+        publish_all_relays_status();
+        publish_all_relays_timeout();
 #endif//CONFIG_MQTT_RELAYS_NB
 #ifdef CONFIG_MQTT_THERMOSTAT
         publish_thermostat_data();

@@ -32,7 +32,6 @@ QueueHandle_t thermostatQueue;
 #if CONFIG_MQTT_RELAYS_NB
 #include "app_relay.h"
 QueueHandle_t relayCmdQueue;
-QueueHandle_t relayCfgQueue;
 int relayOnTimeout[CONFIG_MQTT_RELAYS_NB];
 #endif//CONFIG_MQTT_RELAYS_NB
 
@@ -119,7 +118,7 @@ void app_main(void)
   esp_log_level_set("TRANSPORT_SSL", ESP_LOG_VERBOSE);
   esp_log_level_set("TRANSPORT", ESP_LOG_VERBOSE);
   esp_log_level_set("OUTBOX", ESP_LOG_VERBOSE);
-
+  esp_log_level_set("MQTTS_MQTT", ESP_LOG_DEBUG);
 
   mqtt_event_group = xEventGroupCreate();
   wifi_event_group = xEventGroupCreate();
@@ -129,8 +128,7 @@ void app_main(void)
 #endif // CONFIG_MQTT_THERMOSTAT
 
 #if CONFIG_MQTT_RELAYS_NB
-  relayCmdQueue = xQueueCreate(32, sizeof(struct RelayCmdMessage) );
-  relayCfgQueue = xQueueCreate(8, sizeof(struct RelayCfgMessage) );
+  relayCmdQueue = xQueueCreate(32, sizeof(struct RelayMessage) );
 #endif //CONFIG_MQTT_RELAYS_NB
 
 #ifdef CONFIG_MQTT_SCHEDULERS
@@ -189,7 +187,6 @@ void app_main(void)
 
 #if CONFIG_MQTT_RELAYS_NB
     xTaskCreate(handle_relay_cmd_task, "handle_relay_cmd_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
-    xTaskCreate(handle_relay_cfg_task, "handle_relay_cfg_task", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
 #endif //CONFIG_MQTT_RELAYS_NB
 
 #if CONFIG_MQTT_SWITCHES_NB

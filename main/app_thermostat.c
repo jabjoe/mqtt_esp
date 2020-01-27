@@ -147,7 +147,8 @@ void disableThermostat(const char * reason)
 {
   publish_thermostat_state(NULL, 0);
   thermostatEnabled=false;
-  update_relay_state(CONFIG_MQTT_THERMOSTAT_RELAY_ID, 0);
+  //fixme send update via relay queue
+  //update_relay_state(CONFIG_MQTT_THERMOSTAT_RELAY_ID, 0);
   publish_thermostat_state(reason, thermostatDuration);
   thermostatDuration = 0;
   ESP_LOGI(TAG, "thermostat disabled");
@@ -157,7 +158,8 @@ void enableThermostat(const char * reason)
 {
   publish_thermostat_state(NULL, 0);
   thermostatEnabled=true;
-  update_relay_state(CONFIG_MQTT_THERMOSTAT_RELAY_ID, 1);
+  //fixme send update via relay queue
+  //update_relay_state(CONFIG_MQTT_THERMOSTAT_RELAY_ID, 1);
   publish_thermostat_state(reason, thermostatDuration);
   thermostatDuration = 0;
   ESP_LOGI(TAG, "thermostat enabled");

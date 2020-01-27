@@ -37,7 +37,6 @@ const int relayToGpioMap[CONFIG_MQTT_RELAYS_NB] = {
 static const char *TAG = "MQTTS_RELAY";
 
 extern QueueHandle_t relayCmdQueue;
-extern QueueHandle_t relayCfgQueue;
 
 void relays_init()
 {
@@ -51,12 +50,11 @@ void relays_init()
   }
 }
 
-void publish_relay_data(int id)
+void publish_relay_status(int id)
 {
-  const char * relays_topic = CONFIG_MQTT_DEVICE_TYPE"/"CONFIG_MQTT_CLIENT_ID"/evt/relay/";
-  char data[32];
-  memset(data,0,32);
-  sprintf(data, "{\"state\":%d}", relayStatus[id] == RELAY_ON);
+  const char * relays_topic = CONFIG_MQTT_DEVICE_TYPE"/"CONFIG_MQTT_CLIENT_ID"/evt/state/relay/";
+  char data[16];
+  sprintf(data, "%s", relayStatus[id] == RELAY_ON ? "ON" : "OFF");
 
   char topic[MQTT_MAX_TOPIC_LEN];
   memset(topic,0,MQTT_MAX_TOPIC_LEN);
@@ -65,33 +63,33 @@ void publish_relay_data(int id)
   mqtt_publish_data(topic, data, QOS_1, RETAIN);
 }
 
-void publish_relay_cfg_data(int id)
+void publish_relay_timeout(int id)
 {
-  const char * relays_topic = CONFIG_MQTT_DEVICE_TYPE"/"CONFIG_MQTT_CLIENT_ID"/evt/relay/";
+  const char * relays_topic = CONFIG_MQTT_DEVICE_TYPE"/"CONFIG_MQTT_CLIENT_ID"/evt/timeout/relay/";
   char data[32];
   memset(data,0,32);
-  sprintf(data, "{\"onTimeout\":%d}", relayOnTimeout[id]);
+  sprintf(data, "%d", relayOnTimeout[id]);
 
   char topic[MQTT_MAX_TOPIC_LEN];
   memset(topic,0,MQTT_MAX_TOPIC_LEN);
-  sprintf(topic, "%s%d/cfg", relays_topic, id);
+  sprintf(topic, "%s%d", relays_topic, id);
 
   mqtt_publish_data(topic, data, QOS_1, RETAIN);
 }
 
 
-void publish_all_relays_data()
+void publish_all_relays_status()
 {
   for(int id = 0; id < CONFIG_MQTT_RELAYS_NB; id++) {
-    publish_relay_data(id);
+    publish_relay_status(id);
     vTaskDelay(50 / portTICK_PERIOD_MS);
   }
 }
 
-void publish_all_relays_cfg_data()
+void publish_all_relays_timeout()
 {
   for(int id = 0; id < CONFIG_MQTT_RELAYS_NB; id++) {
-    publish_relay_cfg_data(id);
+    publish_relay_timeout(id);
     vTaskDelay(50 / portTICK_PERIOD_MS);
   }
 }
@@ -100,7 +98,7 @@ void vTimerCallback( TimerHandle_t xTimer )
 {
   int id = (int)pvTimerGetTimerID( xTimer );
   ESP_LOGI(TAG, "timer %d expired, sending stop msg", id);
-  struct RelayCmdMessage r={id, 0};
+  struct RelayMessage r={RELAY_STATE_CMD, id, {0}};
   if (xQueueSend( relayCmdQueue
                   ,( void * )&r
                   ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
@@ -151,32 +149,34 @@ void update_timer(int id)
   }
 }
 
-void update_relay_state(int id, char value)
+void update_relay_state(struct RelayMessage r)
 {
-  ESP_LOGI(TAG, "update_relay_state: id: %d, value: %d", id, value);
+  int id = r.relayId;
+  ESP_LOGI(TAG, "update_relay_state: id: %d, value: %d", id, r.data.state);
   ESP_LOGI(TAG, "relayStatus[%d] = %d", id, relayStatus[id]);
-  if (value != (relayStatus[id] == RELAY_ON)) {
-    if (value == 1) {
+  if ((r.data.state == RELAY_STATE_ON) != (relayStatus[id] == RELAY_ON)) {
+    if (r.data.state == RELAY_STATE_ON) {
       relayStatus[id] = RELAY_ON;
       ESP_LOGI(TAG, "enabling GPIO %d", relayToGpioMap[id]);
     }
-    if (value == 0) {
+    if (r.data.state == RELAY_STATE_OFF) {
       relayStatus[id] = RELAY_OFF;
       ESP_LOGI(TAG, "disabling GPIO %d", relayToGpioMap[id]);
     }
     gpio_set_level(relayToGpioMap[id], relayStatus[id]);
     update_timer(id);
   }
-  publish_relay_data(id);
+  publish_relay_status(id);
 }
 
-void update_relay_onTimeout(int id, char onTimeout)
+void update_relay_timeout(struct RelayMessage t)
 {
-  ESP_LOGI(TAG, "update_relay_onTimeout: id: %d, value: %d", id, onTimeout);
+  int id = t.relayId;
+  ESP_LOGI(TAG, "update_relay_timeout: id: %d, value: %d", id, t.data.timeout);
   ESP_LOGI(TAG, "relayStatus[%d] = %d", id, relayOnTimeout[id]);
 
-  if (onTimeout != relayOnTimeout[id]) {
-    relayOnTimeout[id] = onTimeout;
+  if (t.data.timeout != relayOnTimeout[id]) {
+    relayOnTimeout[id] = t.data.timeout;
     update_timer(id);
 
     //FIXME extract NVS to separate function
@@ -185,40 +185,25 @@ void update_relay_onTimeout(int id, char onTimeout)
     esp_err_t err = write_nvs_integer(onTimeoutTag, relayOnTimeout[id]);
     ESP_ERROR_CHECK( err );
   }
-  publish_relay_cfg_data(id);
+  publish_relay_timeout(id);
 }
 
 void handle_relay_cmd_task(void* pvParameters)
 {
   ESP_LOGI(TAG, "handle_relay_cmd_task started");
 
-  struct RelayCmdMessage r;
-  int id;
-  int value;
+  struct RelayMessage r;
   while(1) {
     if( xQueueReceive( relayCmdQueue, &r , portMAX_DELAY) )
       {
-        id=r.relayId;
-        value=r.relayValue;
-        update_relay_state(id, value);
+        if (r.msgType == RELAY_STATE_CMD) {
+          update_relay_state(r);
+        } else if (r.msgType == RELAY_TIMEOUT_CMD) {
+          update_relay_timeout(r);
+        }
       }
   }
 }
 
-void handle_relay_cfg_task(void* pvParameters)
-{
-  ESP_LOGI(TAG, "handle_relay_cfg_task started");
-  struct RelayCfgMessage r;
-  int id;
-  int onTimeout;
-  while(1) {
-    if( xQueueReceive( relayCfgQueue, &r , portMAX_DELAY) )
-      {
-        id=r.relayId;
-        onTimeout=r.onTimeout;
-        update_relay_onTimeout(id, onTimeout);
-      }
-  }
-}
 
 #endif //CONFIG_MQTT_RELAYS_NB
