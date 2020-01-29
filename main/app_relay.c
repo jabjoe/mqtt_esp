@@ -109,13 +109,11 @@ void vTimerCallback( TimerHandle_t xTimer )
 void update_timer(int id)
 {
   ESP_LOGI(TAG, "update_timer for %d, timeout: %d", id, relayOnTimeout[id]);
-
-  if ((relayStatus[id] == RELAY_OFF)) {
-    if (relayOnTimer[id] != NULL) {
-      if (xTimerIsTimerActive(relayOnTimer[id]) != pdFALSE){
-        ESP_LOGI(TAG, "found started timer, stopping");
-        xTimerStop( relayOnTimer[id], portMAX_DELAY );
-      }
+  if( relayOnTimer[id] != NULL ) {
+    ESP_LOGI(TAG, "timer is already created");
+    if (xTimerIsTimerActive(relayOnTimer[id]) != pdFALSE){
+      ESP_LOGI(TAG, "timer is active, stopping");
+      xTimerStop( relayOnTimer[id], portMAX_DELAY );
     }
   }
 
@@ -128,23 +126,22 @@ void update_timer(int id)
                       pdFALSE,                /* Autoreload. */
                       (void *)id,                  /* No ID. */
                       vTimerCallback );  /* Callback function. */
+    } else {
+      ESP_LOGI(TAG, "reusing previous stopped timer");
     }
-    if( relayOnTimer[id] != NULL ) {
-      ESP_LOGI(TAG, "timer is created");
-      if (xTimerIsTimerActive(relayOnTimer[id]) != pdFALSE){
-        ESP_LOGI(TAG, "timer is active, stopping");
-        xTimerStop( relayOnTimer[id], portMAX_DELAY );
-      }
 
-      TickType_t xTimerPeriod = xTimerGetPeriod(relayOnTimer[id]);
-      if (xTimerPeriod != pdMS_TO_TICKS(relayOnTimeout[id]*1000)) {
-        ESP_LOGI(TAG, "timer change period, starting also");
-        xTimerChangePeriod(relayOnTimer[id], pdMS_TO_TICKS(relayOnTimeout[id]*1000), portMAX_DELAY ); //FIXME check return value
+    TickType_t xTimerPeriod = xTimerGetPeriod(relayOnTimer[id]);
+    if (xTimerPeriod != pdMS_TO_TICKS(relayOnTimeout[id]*1000)) {
+      ESP_LOGI(TAG, "timer change period, starting it also");
+      if (xTimerChangePeriod(relayOnTimer[id], pdMS_TO_TICKS(relayOnTimeout[id]*1000), portMAX_DELAY) == pdPASS) {
+        ESP_LOGI(TAG, "period changed and timer started");
+      } else {
+        ESP_LOGE(TAG, "cannot change timer period");
       }
-      else {
-        ESP_LOGI(TAG, "timer starting");
-        xTimerStart( relayOnTimer[id], portMAX_DELAY );
-      }
+    }
+    else {
+      ESP_LOGI(TAG, "timer starting");
+      xTimerStart( relayOnTimer[id], portMAX_DELAY );
     }
   }
 }

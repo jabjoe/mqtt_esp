@@ -21,7 +21,7 @@ void handle_scheduler(void* pvParameters);
 
 union Data {
   struct RelayMessage relayActionData;
-  struct ThermostatCmdMessage thermostatActionData;
+  struct ThermostatMessage thermostatActionData;
   struct TemperatureCmdMessage tempActionData;
   struct TriggerData {time_t now;} triggerActionData;
 };

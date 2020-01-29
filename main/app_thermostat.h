@@ -7,25 +7,24 @@
 #define BIT_WATER_SENSOR (1 << 1)
 #define BIT_ROOM_SENSOR (1 << 2)
 
+#define BIT_HEAT (1 << 1)
+
 enum ThermostatMode {
+  TERMOSTAT_MODE_UNSET = 0, //1
   TERMOSTAT_MODE_OFF = BIT_THERMOSTAT, //1
-  TERMOSTAT_MODE_SUMMER = BIT_WATER_SENSOR | BIT_THERMOSTAT, //3
-  TERMOSTAT_MODE_SPRING_AUTUMN = BIT_WATER_SENSOR | BIT_ROOM_SENSOR | BIT_THERMOSTAT, //7
-  TERMOSTAT_MODE_WINTER = BIT_ROOM_SENSOR | BIT_THERMOSTAT, //5
+  TERMOSTAT_MODE_HEAT = BIT_THERMOSTAT | BIT_HEAT, //3
 };
 
-enum HoldOffMode {
-  HOLD_OFF_DISABLED = 1,
-  HOLD_OFF_ENABLED,
-};
+/* enum ThermostatMode { */
+/*   TERMOSTAT_MODE_OFF = BIT_THERMOSTAT, //1 */
+/*   TERMOSTAT_MODE_SUMMER = BIT_WATER_SENSOR | BIT_THERMOSTAT, //3 */
+/*   TERMOSTAT_MODE_SPRING_AUTUMN = BIT_WATER_SENSOR | BIT_ROOM_SENSOR | BIT_THERMOSTAT, //7 */
+/*   TERMOSTAT_MODE_WINTER = BIT_ROOM_SENSOR | BIT_THERMOSTAT, //5 */
+/* }; */
+
 enum ThermostatState {
   THERMOSTAT_STATE_ON = 1,
   THERMOSTAT_STATE_OFF,
-
-};
-struct ThermostatCmdMessage {
-  enum HoldOffMode holdOffMode;
-  enum ThermostatState thermostatState;
 };
 
 struct TemperatureCmdMessage {
@@ -38,7 +37,6 @@ struct ThermostatCfgMessage {
   short waterTemperatureSensibility;
   short room0TargetTemperature;
   short room0TemperatureSensibility;
-  enum ThermostatMode thermostatMode;
 };
 
 struct ThermostatSensorsMessage {
@@ -52,9 +50,10 @@ struct ThermostatRoomMessage {
 
 union ThermostatData {
   struct ThermostatCfgMessage cfgData;
-  struct ThermostatCmdMessage cmdData;
   struct ThermostatSensorsMessage sensorsData;
   struct ThermostatRoomMessage roomData;
+  enum ThermostatMode thermostatMode;
+  int targetTemperature;
 };
 
 #define THERMOSTAT_CMD_MSG 1
@@ -62,6 +61,13 @@ union ThermostatData {
 #define THERMOSTAT_SENSORS_MSG 3
 #define THERMOSTAT_ROOM_0_MSG 4
 #define THERMOSTAT_LIFE_TICK 5
+
+//new modes
+#define THERMOSTAT_CMD_MODE 6
+#define WATER_THERMOSTAT_CMD_MODE 7
+#define THERMOSTAT_CMD_TARGET_TEMPERATURE 8
+#define WATER_THERMOSTAT_CMD_TARGET_TEMPERATURE 8
+
 
 struct ThermostatMessage {
   unsigned char msgType;

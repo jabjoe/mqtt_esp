@@ -106,12 +106,12 @@ void handle_relay_action_trigger(struct SchedulerCfgMessage *msg) {
 }
 
 void handle_thermostat_action_trigger(struct SchedulerCfgMessage *msg) {
-  struct ThermostatCmdMessage t=msg->data.thermostatActionData;
-  if (xQueueSend( thermostatQueue,
-                  ( void * )&t,
-                  RELAY_QUEUE_TIMEOUT) != pdPASS) {
-    ESP_LOGE(TAG, "Cannot send to thermostatCmdQueue");
-  }
+  /* struct ThermostatCmdMessage t=msg->data.thermostatActionData; */
+  /* if (xQueueSend( thermostatQueue, */
+  /*                 ( void * )&t, */
+  /*                 RELAY_QUEUE_TIMEOUT) != pdPASS) { */
+  /*   ESP_LOGE(TAG, "Cannot send to thermostatCmdQueue"); */
+  /* } */
 }
 
 void handle_temperature_action_trigger(struct SchedulerCfgMessage *msg) {
