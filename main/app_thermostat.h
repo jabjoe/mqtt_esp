@@ -54,6 +54,7 @@ union ThermostatData {
   struct ThermostatRoomMessage roomData;
   enum ThermostatMode thermostatMode;
   int targetTemperature;
+  int tolerance;
 };
 
 #define THERMOSTAT_CMD_MSG 1
@@ -67,6 +68,8 @@ union ThermostatData {
 #define WATER_THERMOSTAT_CMD_MODE 7
 #define THERMOSTAT_CMD_TARGET_TEMPERATURE 8
 #define WATER_THERMOSTAT_CMD_TARGET_TEMPERATURE 8
+#define THERMOSTAT_CMD_TOLERANCE 9
+#define WATER_THERMOSTAT_CMD_TOLERANCE 10
 
 
 struct ThermostatMessage {

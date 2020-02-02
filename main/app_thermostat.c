@@ -119,13 +119,38 @@ void publish_thermostat_current_temperature_evt()
 
 void publish_water_thermostat_current_temperature_evt()
 {
-  const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/temp/thermostat";
+  if (waterCurrentTemperatureFlag <= 0)
+    return;
+  const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/ctemp/wthermostat";
 
   char data[16];
   memset(data,0,16);
-  sprintf(data, "%d", targetTemperature);
+  sprintf(data, "%d", waterCurrentTemperature);
   mqtt_publish_data(topic, data, QOS_1, RETAIN);
 }
+
+void publish_thermostat_tolerance_evt()
+{
+  if (currentTemperatureFlag <= 0)
+    return;
+  const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/tolerance/thermostat";
+
+  char data[16];
+  memset(data,0,16);
+  sprintf(data, "%d", room0TemperatureSensibility);
+  mqtt_publish_data(topic, data, QOS_1, RETAIN);
+}
+
+void publish_water_thermostat_tolerance_evt()
+{
+  const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/tolerance/wthermostat";
+
+  char data[16];
+  memset(data,0,16);
+  sprintf(data, "%d", waterTemperatureSensibility);
+  mqtt_publish_data(topic, data, QOS_1, RETAIN);
+}
+
 
 void publish_thermostat_cfg()
 {
@@ -405,6 +430,7 @@ void handle_thermostat_cmd_task(void* pvParameters)
   while(1) {
     if( xQueueReceive( thermostatQueue, &tm , portMAX_DELAY) )
       {
+
         if (tm.msgType == THERMOSTAT_CMD_MODE) {
           if (thermostatMode != tm.data.thermostatMode) {
             thermostatMode = tm.data.thermostatMode;
@@ -421,6 +447,7 @@ void handle_thermostat_cmd_task(void* pvParameters)
           }
           publish_water_thermostat_mode_evt();
         }
+
         if (tm.msgType == THERMOSTAT_CMD_TARGET_TEMPERATURE) {
           if (targetTemperature != tm.data.targetTemperature) {
             targetTemperature = tm.data.targetTemperature;
@@ -436,6 +463,23 @@ void handle_thermostat_cmd_task(void* pvParameters)
             ESP_ERROR_CHECK( err );
           }
           publish_water_thermostat_target_temperature_evt();
+        }
+
+        if (tm.msgType == THERMOSTAT_CMD_TOLERANCE) {
+          if (room0TemperatureSensibility != tm.data.tolerance) {
+            room0TemperatureSensibility = tm.data.tolerance;
+            esp_err_t err = write_nvs_short(room0TemperatureSensibilityTAG, room0TemperatureSensibility);
+            ESP_ERROR_CHECK( err );
+          }
+          publish_thermostat_tolerance_evt();
+        }
+        if (tm.msgType == WATER_THERMOSTAT_CMD_TOLERANCE) {
+          if (waterTemperatureSensibility != tm.data.tolerance) {
+            waterTemperatureSensibility = tm.data.tolerance;
+            esp_err_t err = write_nvs_short(waterTemperatureSensibilityTAG, waterTemperatureSensibility);
+            ESP_ERROR_CHECK( err );
+          }
+          publish_water_thermostat_tolerance_evt();
         }
 
         if (tm.msgType == THERMOSTAT_ROOM_0_MSG) {
@@ -456,21 +500,7 @@ void handle_thermostat_cmd_task(void* pvParameters)
 /*             ESP_ERROR_CHECK( err ); */
 /*             updated = true; */
 /*           } */
-/*           if (t.data.cfgData.waterTemperatureSensibility && waterTemperatureSensibility != t.data.cfgData.waterTemperatureSensibility) { */
-/*             waterTemperatureSensibility=t.data.cfgData.waterTemperatureSensibility; */
-/*             esp_err_t err = write_nvs_short(waterTemperatureSensibilityTAG, waterTemperatureSensibility); */
-/*             ESP_ERROR_CHECK( err ); */
-/*             updated = true; */
-/*           } */
 /* #endif //CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER */
-/* #if CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB > 0 */
-/*           if (t.data.cfgData.currentTemperatureSensibility && currentTemperatureSensibility != t.data.cfgData.currentTemperatureSensibility) { */
-/*             currentTemperatureSensibility=t.data.cfgData.currentTemperatureSensibility; */
-/*             esp_err_t err = write_nvs_short(currentTemperatureSensibilityTAG, currentTemperatureSensibility); */
-/*             ESP_ERROR_CHECK( err ); */
-/*             updated = true; */
-/*           } */
-/* #endif //CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB > 0 */
 /*           if (updated) { */
 /*             publish_thermostat_cfg(); */
 /*           } */
