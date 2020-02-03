@@ -23,8 +23,10 @@ enum ThermostatMode {
 /* }; */
 
 enum ThermostatState {
-  THERMOSTAT_STATE_ON = 1,
+  THERMOSTAT_STATE_UNSET = 0,
   THERMOSTAT_STATE_OFF,
+  THERMOSTAT_STATE_IDLE,
+  THERMOSTAT_STATE_HEATING
 };
 
 struct TemperatureCmdMessage {
