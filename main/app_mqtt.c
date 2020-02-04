@@ -75,6 +75,18 @@ extern QueueHandle_t thermostatQueue;
 
 #endif // CONFIG_MQTT_THERMOSTAT
 
+#ifdef CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER
+
+#define OTHERMOSTAT_TOPICS_NB 1
+#define CMD_OTHERMOSTAT_TOPIC CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/cmd/+/thermostat"
+
+#else //CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER
+
+#define OTHERMOSTAT_TOPICS_NB 0
+
+#endif //CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER
+
+
 esp_mqtt_client_handle_t client = NULL;
 
 const char * available_topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/state/available";
@@ -94,7 +106,7 @@ extern QueueHandle_t mqttQueue;
 static const char *TAG = "MQTTS_MQTT";
 
 
-#define NB_SUBSCRIPTIONS  (OTA_TOPICS_NB + THERMOSTAT_TOPICS_NB + RELAYS_TOPICS_NB + SCHEDULER_TOPICS_NB + CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB)
+#define NB_SUBSCRIPTIONS  (OTA_TOPICS_NB + OTHERMOSTAT_TOPICS_NB + THERMOSTAT_TOPICS_NB + RELAYS_TOPICS_NB + SCHEDULER_TOPICS_NB + CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB)
 
 #define RELAY_CMD_TOPIC CONFIG_MQTT_DEVICE_TYPE"/"CONFIG_MQTT_CLIENT_ID"/cmd/+/relay/"
 
@@ -115,6 +127,9 @@ const char *SUBSCRIPTIONS[NB_SUBSCRIPTIONS] =
     CMD_THERMOSTAT_TOPIC,
     CMD_WATER_THERMOSTAT_TOPIC,
 #endif // CONFIG_MQTT_THERMOSTAT
+#ifdef CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER
+    CMD_OTHERMOSTAT_TOPIC,
+#endif //CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER
 #if CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB
     CONFIG_MQTT_THERMOSTAT_ROOM_0_SENSORS_TOPIC,
 #if CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB > 1
@@ -305,12 +320,12 @@ void handle_thermostat_mqtt_mode_cmd(const char *payload)
     tm.data.thermostatMode = TERMOSTAT_MODE_HEAT;
   else if (strcmp(payload, "off") == 0)
     tm.data.thermostatMode = TERMOSTAT_MODE_OFF;
-  
+
   if (tm.data.thermostatMode == TERMOSTAT_MODE_UNSET) {
     ESP_LOGE(TAG, "wrong payload");
     return;
   }
-  
+
   if (xQueueSend( thermostatQueue
                   ,( void * )&tm
                   ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
@@ -362,6 +377,7 @@ void handle_water_thermostat_mqtt_temp_cmd(const char *payload)
     ESP_LOGE(TAG, "Cannot send to thermostatQueue");
   }
 }
+
 void handle_water_thermostat_mqtt_tolerance_cmd(const char *payload)
 {
   struct ThermostatMessage tm;
@@ -387,12 +403,12 @@ void handle_water_thermostat_mqtt_mode_cmd(const char *payload)
     tm.data.thermostatMode = TERMOSTAT_MODE_HEAT;
   else if (strcmp(payload, "off") == 0)
     tm.data.thermostatMode = TERMOSTAT_MODE_OFF;
-  
+
   if (tm.data.thermostatMode == TERMOSTAT_MODE_UNSET) {
     ESP_LOGE(TAG, "wrong payload");
     return;
   }
-  
+
   if (xQueueSend( thermostatQueue
                   ,( void * )&tm
                   ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
@@ -440,6 +456,32 @@ void handle_thermostat_mqtt_cmd(const char* topic, const char* payload)
     return;
   }
   ESP_LOGW(TAG, "unhlandled relay cmd: %s", action);
+}
+
+void handle_optimizer_thermostat_mqtt_min_cycle_duration_cmd(const char *payload)
+{
+  struct ThermostatMessage tm;
+  memset(&tm, 0, sizeof(struct ThermostatMessage));
+  tm.msgType = OPTIMIZER_THERMOSTAT_CMD_MIN_CYCLE_DURATION;
+  // FIXME: add tests to convert from decimal integer to 0.1dC
+  tm.data.min_cycle_duration = atoi(payload);
+
+  if (xQueueSend( thermostatQueue
+                  ,( void * )&tm
+                  ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
+    ESP_LOGE(TAG, "Cannot send to thermostatQueue");
+  }
+}
+
+void handle_optimizer_thermostat_mqtt_cmd(const char* topic, const char* payload)
+{
+  char action[16];
+  getAction(action, topic);
+  if (strcmp(action, "min_cycle_duration") == 0) {
+    handle_optimizer_thermostat_mqtt_min_cycle_duration_cmd(payload);
+    return;
+  }
+
 }
 void handle_water_thermostat_mqtt_cmd(const char* topic, const char* payload)
 {
@@ -647,7 +689,7 @@ void dispatch_mqtt_event(const esp_mqtt_event_handle_t event)
 
     memcpy(payload, event->data, event->data_len);
     payload[event->data_len] = 0;
-    
+
     char service[16];
     getService(service, event->topic);
 
@@ -665,6 +707,10 @@ void dispatch_mqtt_event(const esp_mqtt_event_handle_t event)
     }
     if (strcmp(service, "wthermostat") == 0) {
       handle_water_thermostat_mqtt_cmd(event->topic, payload);
+      return;
+    }
+    if (strcmp(service, "othermostat") == 0) {
+      handle_optimizer_thermostat_mqtt_cmd(event->topic, payload);
       return;
     }
 #endif //CONFIG_MQTT_THERMOSTAT

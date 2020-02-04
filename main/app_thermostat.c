@@ -39,6 +39,9 @@ const char * waterTemperatureSensibilityTAG="wTempSens";
 unsigned int waterCurrentTemperature = 0;
 unsigned int waterCurrentTemperatureFlag = 0;
 
+short minCycleDuration=30; //30 minutes
+const char * minCycleDurationTag="minCycle";
+
 short circuitTargetTemperature=23*10; //30 degrees
 const char * circuitTargetTemperatureTAG="ctgtTemp";
 unsigned int circuitTemperature = 0;
@@ -165,6 +168,16 @@ void publish_water_thermostat_current_temperature_evt()
   char data[16];
   memset(data,0,16);
   sprintf(data, "%d", waterCurrentTemperature);
+  mqtt_publish_data(topic, data, QOS_1, RETAIN);
+}
+
+void publish_optimizer_thermostat_min_cycle_duration_evt()
+{
+  const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/min_cycle_duration/othermostat";
+
+  char data[16];
+  memset(data,0,16);
+  sprintf(data, "%d", minCycleDuration);
   mqtt_publish_data(topic, data, QOS_1, RETAIN);
 }
 
@@ -529,6 +542,16 @@ void handle_thermostat_cmd_task(void* pvParameters)
           publish_water_thermostat_tolerance_evt();
         }
 
+
+        if (tm.msgType == OPTIMIZER_THERMOSTAT_CMD_MIN_CYCLE_DURATION) {
+          if (minCycleDuration != tm.data.min_cycle_duration) {
+            minCycleDuration = tm.data.min_cycle_duration;
+            esp_err_t err = write_nvs_short(minCycleDurationTag, minCycleDuration);
+            ESP_ERROR_CHECK( err );
+          }
+          publish_optimizer_thermostat_min_cycle_duration_evt();
+        }
+
         if (tm.msgType == THERMOSTAT_ROOM_0_MSG) {
           handle_room_temperature_msg(tm.data.roomData.temperature);
         }
@@ -613,5 +636,9 @@ void read_nvs_thermostat_data()
   if (thermostatMode == TERMOSTAT_MODE_HEAT || waterThermostatMode == TERMOSTAT_MODE_HEAT ) {
     thermostatState = THERMOSTAT_STATE_IDLE;
   }
+
+  err=read_nvs_short(minCycleDurationTag, &minCycleDuration);
+  ESP_ERROR_CHECK( err );
+
 }
 #endif // CONFIG_MQTT_THERMOSTAT
