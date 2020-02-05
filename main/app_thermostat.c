@@ -151,6 +151,9 @@ void publish_water_thermostat_target_temperature_evt()
 
 void publish_thermostat_current_temperature_evt()
 {
+  if (currentTemperatureFlag <= 0)
+    return;
+
   const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/ctemp/thermostat";
 
   char data[16];
@@ -163,11 +166,35 @@ void publish_water_thermostat_current_temperature_evt()
 {
   if (waterCurrentTemperatureFlag <= 0)
     return;
+
   const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/ctemp/wthermostat";
 
   char data[16];
   memset(data,0,16);
   sprintf(data, "%d", waterCurrentTemperature);
+  mqtt_publish_data(topic, data, QOS_1, RETAIN);
+}
+
+void publish_optimizer_thermostat_current_cw_low_temp_evt()
+{
+  if (circuitTemperatureFlag <= 0)
+    return;
+
+  const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/ctemp/wthermostat";
+
+  char data[16];
+  memset(data,0,16);
+  sprintf(data, "%d", waterCurrentTemperature);
+  mqtt_publish_data(topic, data, QOS_1, RETAIN);
+}
+
+void publish_optimizer_thermostat_target_cw_low_temp_evt()
+{
+  const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/cw_low_ctemp/othermostat";
+
+  char data[16];
+  memset(data,0,16);
+  sprintf(data, "%d", circuitTemperature);
   mqtt_publish_data(topic, data, QOS_1, RETAIN);
 }
 
@@ -183,8 +210,6 @@ void publish_optimizer_thermostat_min_cycle_duration_evt()
 
 void publish_thermostat_tolerance_evt()
 {
-  if (currentTemperatureFlag <= 0)
-    return;
   const char * topic = CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/evt/tolerance/thermostat";
 
   char data[16];
@@ -461,6 +486,10 @@ void handle_sensors_msg(short newWaterTemperature, short newCircuitTemperature)
   }
 
   if (circuitTemperature != SHRT_MIN) {
+    if (newCircuitTemperature != circuitTemperature) {
+      publish_optimizer_thermostat_current_cw_low_temp_evt();
+    }
+
     circuitTemperature_3 = circuitTemperature_2;
     circuitTemperature_2 = circuitTemperature_1;
     circuitTemperature_1 = circuitTemperature;
@@ -552,54 +581,42 @@ void handle_thermostat_cmd_task(void* pvParameters)
           publish_optimizer_thermostat_min_cycle_duration_evt();
         }
 
+        if (tm.msgType == OPTIMIZER_THERMOSTAT_CMD_CW_LOW_TEMP_CMD) {
+          if (circuitTargetTemperature != tm.data.targetTemperature) {
+            circuitTargetTemperature = tm.data.targetTemperature;
+            esp_err_t err = write_nvs_short(circuitTargetTemperatureTAG, circuitTargetTemperature);
+            ESP_ERROR_CHECK( err );
+          }
+          publish_optimizer_thermostat_target_cw_low_temp_evt();
+        }
+
         if (tm.msgType == THERMOSTAT_ROOM_0_MSG) {
           handle_room_temperature_msg(tm.data.roomData.temperature);
         }
         if (tm.msgType == THERMOSTAT_SENSORS_MSG) {
           handle_sensors_msg(tm.data.sensorsData.wtemperature, tm.data.sensorsData.ctemperature);
         }
+        if (tm.msgType == THERMOSTAT_LIFE_TICK) {
+          thermostatDuration += 1;
+#ifdef CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER
+          heatingDuration += 1;
+          if (waterCurrentTemperatureFlag > 0)
+            waterCurrentTemperatureFlag -= 1;
+          if (circuitTemperatureFlag > 0)
+            circuitTemperatureFlag -= 1;
+          ESP_LOGI(TAG, "waterTemperatureFlag: %d, circuitTemperatureFlag: %d",
+                   waterCurrentTemperatureFlag, circuitTemperatureFlag);
+#endif //CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER
 
+#if CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB > 0
+          if (currentTemperatureFlag > 0)
+            currentTemperatureFlag -= 1;
 
-/*         //old bellow */
-/*         if (t.msgType == THERMOSTAT_CFG_MSG) { */
-/*           bool updated = false; */
-/* #ifdef CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER */
-/*           if (t.data.cfgData.circuitTargetTemperature && circuitTargetTemperature != t.data.cfgData.circuitTargetTemperature) { */
-/*             circuitTargetTemperature=t.data.cfgData.circuitTargetTemperature; */
-/*             esp_err_t err = write_nvs_short(circuitTargetTemperatureTAG, circuitTargetTemperature); */
-/*             ESP_ERROR_CHECK( err ); */
-/*             updated = true; */
-/*           } */
-/* #endif //CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER */
-/*           if (updated) { */
-/*             publish_thermostat_cfg(); */
-/*           } */
-/*         } */
-/* #ifdef CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER */
-/* #endif //CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER */
-/* #if CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB > 0 */
-/* #endif //CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB > 0 */
-/*         if (t.msgType == THERMOSTAT_LIFE_TICK) { */
-/*           thermostatDuration += 1; */
-/* #ifdef CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER */
-/*           heatingDuration += 1; */
-/*           if (waterTemperatureFlag > 0) */
-/*             waterTemperatureFlag -= 1; */
-/*           if (circuitTemperatureFlag > 0) */
-/*             circuitTemperatureFlag -= 1; */
-/*           ESP_LOGI(TAG, "waterTemperatureFlag: %d, circuitTemperatureFlag: %d", */
-/*                    waterTemperatureFlag, circuitTemperatureFlag); */
-/* #endif //CONFIG_MQTT_THERMOSTAT_HEATING_OPTIMIZER */
-
-/* #if CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB > 0 */
-/*           if (currentTemperatureFlag > 0) */
-/*             currentTemperatureFlag -= 1; */
-
-/*           ESP_LOGI(TAG, "currentTemperatureFlag: %d", */
-/*                    currentTemperatureFlag); */
-/* #endif //CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB > 0 */
-        /*   update_thermostat(); */
-        /* } */
+          ESP_LOGI(TAG, "currentTemperatureFlag: %d",
+                   currentTemperatureFlag);
+#endif //CONFIG_MQTT_THERMOSTAT_ROOMS_SENSORS_NB > 0
+          update_thermostat();
+        }
       }
   }
 }

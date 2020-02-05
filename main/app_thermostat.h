@@ -74,7 +74,7 @@ union ThermostatData {
 #define THERMOSTAT_CMD_TOLERANCE 9
 #define WATER_THERMOSTAT_CMD_TOLERANCE 10
 #define OPTIMIZER_THERMOSTAT_CMD_MIN_CYCLE_DURATION 11
-
+#define OPTIMIZER_THERMOSTAT_CMD_CW_LOW_TEMP_CMD 12
 
 struct ThermostatMessage {
   unsigned char msgType;

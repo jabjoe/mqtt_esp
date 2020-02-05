@@ -458,6 +458,21 @@ void handle_thermostat_mqtt_cmd(const char* topic, const char* payload)
   ESP_LOGW(TAG, "unhlandled relay cmd: %s", action);
 }
 
+void handle_optimizer_thermostat_mqtt_cw_low_temp_cmd(const char *payload)
+{
+  struct ThermostatMessage tm;
+  memset(&tm, 0, sizeof(struct ThermostatMessage));
+  tm.msgType = OPTIMIZER_THERMOSTAT_CMD_CW_LOW_TEMP_CMD;
+  // FIXME: add tests to convert from decimal integer to 0.1dC
+  tm.data.targetTemperature = atoi(payload);
+
+  if (xQueueSend( thermostatQueue
+                  ,( void * )&tm
+                  ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
+    ESP_LOGE(TAG, "Cannot send to thermostatQueue");
+  }
+}
+
 void handle_optimizer_thermostat_mqtt_min_cycle_duration_cmd(const char *payload)
 {
   struct ThermostatMessage tm;
@@ -479,6 +494,10 @@ void handle_optimizer_thermostat_mqtt_cmd(const char* topic, const char* payload
   getAction(action, topic);
   if (strcmp(action, "min_cycle_duration") == 0) {
     handle_optimizer_thermostat_mqtt_min_cycle_duration_cmd(payload);
+    return;
+  }
+  if (strcmp(action, "cw_low_temp") == 0) {
+    handle_optimizer_thermostat_mqtt_cw_low_temp_cmd(payload);
     return;
   }
 
