@@ -139,7 +139,7 @@ esp_err_t write_nvs_str(const char * tag, char * value)
   return err;
 }
 
-esp_err_t read_nvs_str(const char * tag, char * value, size_t * length)
+esp_err_t read_nvs_str(const char * tag, char * value, size_t * p_length)
 {
   printf("Opening Non-Volatile Storage (NVS) handle... ");
   nvs_handle my_handle;
@@ -152,7 +152,7 @@ esp_err_t read_nvs_str(const char * tag, char * value, size_t * length)
   case ESP_OK:
     printf("Done\n");
     printf("Reading %s from NVS ... ", tag);
-    err = nvs_get_str(my_handle, tag, value, length);
+    err = nvs_get_str(my_handle, tag, value, p_length);
     switch (err) {
     case ESP_OK:
       printf("Done\n");

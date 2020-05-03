@@ -36,7 +36,7 @@ QueueHandle_t relayQueue;
 
 #ifdef CONFIG_MQTT_SCHEDULERS
 #include "app_scheduler.h"
-QueueHandle_t schedulerCfgQueue;
+QueueHandle_t schedulerQueue;
 #endif // CONFIG_MQTT_SCHEDULERS
 
 #ifdef CONFIG_MQTT_OTA
@@ -131,9 +131,8 @@ void app_main(void)
 #endif //CONFIG_MQTT_RELAYS_NB
 
 #ifdef CONFIG_MQTT_SCHEDULERS
-  schedulerCfgQueue = xQueueCreate(8, sizeof(struct SchedulerCfgMessage) );
+  schedulerQueue = xQueueCreate(8, sizeof(struct SchedulerMessage) );
 #endif // CONFIG_MQTT_SCHEDULERS
-
 
 #ifdef CONFIG_MQTT_OTA
   otaQueue = xQueueCreate(1, sizeof(struct OtaMessage) );
@@ -156,6 +155,10 @@ void app_main(void)
 #if CONFIG_MQTT_RELAYS_NB
   relays_init();
 #endif // CONFIG_MQTT_RELAYS_NB
+
+#ifdef CONFIG_MQTT_SCHEDULERS
+  read_nvs_scheduler_data();
+#endif // CONFIG_MQTT_SCHEDULERS
 
 #if CONFIG_MQTT_THERMOSTATS_NB > 0
   read_nvs_thermostat_data();

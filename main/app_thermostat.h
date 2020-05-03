@@ -28,29 +28,7 @@ enum HeatingState {
   HEATING_STATE_ENABLED = 3,
 };
 
-enum HoldOffMode {
-  HOLD_OFF_DISABLED = 1,
-  HOLD_OFF_ENABLED,
-};
-
-struct ThermostatSensorsMessage {
-  short wtemperature;
-  short ctemperature;
-};
-
-struct ThermostatRoomMessage {
-  short temperature;
-};
-
-struct ThermostatMqttSensorsMessage {
-  unsigned char relayId;
-  short temperature;
-};
-
-
 union ThermostatData {
-  struct ThermostatSensorsMessage sensorsData;
-  struct ThermostatRoomMessage roomData;
   enum ThermostatMode thermostatMode;
   int targetTemperature;
   int tolerance;
@@ -65,16 +43,8 @@ union ThermostatData {
 //new modes
 //FIXME: translate this to enum values
 #define THERMOSTAT_CMD_MODE 6
-#define WATER_THERMOSTAT_CMD_MODE 7
 #define THERMOSTAT_CMD_TARGET_TEMPERATURE 8
-#define WATER_THERMOSTAT_CMD_TARGET_TEMPERATURE 9
 #define THERMOSTAT_CMD_TOLERANCE 10
-#define WATER_THERMOSTAT_CMD_TOLERANCE 11
-#define CO_THERMOSTAT_CMD_MODE 12
-#define CO_THERMOSTAT_CMD_TARGET_TEMPERATURE 13
-
-
-
 #define THERMOSTAT_CURRENT_TEMPERATURE 14
 
 struct ThermostatMessage {

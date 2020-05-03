@@ -6,44 +6,30 @@
 #include "freertos/event_groups.h"
 #include "freertos/queue.h"
 
-#include <string.h>
-#include <stdlib.h>
-
 #include "mqtt_client.h"
 
 #include "app_main.h"
 
 #include "app_sensors.h"
 #include "app_mqtt.h"
-
-#include "cJSON.h"
+#include "app_mqtt_util.h"
 
 #ifdef CONFIG_MQTT_SCHEDULERS
+  #include "app_scheduler.h"
 
-#include "app_scheduler.h"
-extern QueueHandle_t schedulerCfgQueue;
-//FIXME hack until decide if queue+thread really usefull
-extern struct SchedulerCfgMessage schedulerCfg;
-//FIXME end hack until decide if queue+thread really usefull
-
-#define SCHEDULER_TOPICS_NB 1
-
+  #define SCHEDULER_TOPICS_NB 1
+  #define SCHEDULER_CFG_TOPIC CONFIG_MQTT_DEVICE_TYPE"/"CONFIG_MQTT_CLIENT_ID"/cmd/+/scheduler/"
 #else // CONFIG_MQTT_SCHEDULERS
-
-#define SCHEDULER_TOPICS_NB 0
-
+  #define SCHEDULER_TOPICS_NB 0
 #endif // CONFIG_MQTT_SCHEDULERS
 
+
 #if CONFIG_MQTT_RELAYS_NB
-#include "app_relay.h"
-extern QueueHandle_t relayQueue;
-
-#define RELAYS_TOPICS_NB 1 //
-
+  #include "app_relay.h"
+  #define RELAYS_TOPICS_NB 1
+  #define CMD_RELAY_TOPIC CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/cmd/+/relay/+"
 #else //CONFIG_MQTT_RELAYS_NB
-
-#define RELAYS_TOPICS_NB 0 //CMD and CFG
-
+  #define RELAYS_TOPICS_NB 0 
 #endif //CONFIG_MQTT_RELAYS_NB
 
 #ifdef CONFIG_MQTT_OTA
@@ -89,11 +75,11 @@ const int MQTT_PUBLISHING_BIT = BIT4;
 
 int mqtt_reconnect_counter;
 
-#define FW_VERSION "0.02.12r"
+#define FW_VERSION "0.02.12r1"
 
 extern QueueHandle_t mqttQueue;
 
-static const char *TAG = "MQTTS_MQTTS";
+static const char *TAG = "MQTTS_MQTT";
 
 #ifdef CONFIG_MQTT_THERMOSTATS_NB0_SENSOR_TYPE_MQTT
 #define CONFIG_MQTT_THERMOSTATS_NB0_SENSOR_MQTT 1
@@ -122,10 +108,6 @@ static const char *TAG = "MQTTS_MQTTS";
 #define CONFIG_MQTT_THERMOSTATS_MQTT_SENSORS (CONFIG_MQTT_THERMOSTATS_NB0_SENSOR_MQTT + CONFIG_MQTT_THERMOSTATS_NB1_SENSOR_MQTT + CONFIG_MQTT_THERMOSTATS_NB2_SENSOR_MQTT + CONFIG_MQTT_THERMOSTATS_NB3_SENSOR_MQTT)
 
 #define NB_SUBSCRIPTIONS  (OTA_TOPICS_NB + THERMOSTAT_TOPICS_NB + RELAYS_TOPICS_NB + SCHEDULER_TOPICS_NB + CONFIG_MQTT_THERMOSTATS_MQTT_SENSORS)
-
-#define CMD_RELAY_TOPIC CONFIG_MQTT_DEVICE_TYPE "/" CONFIG_MQTT_CLIENT_ID "/cmd/+/relay/+"
-
-#define SCHEDULER_CFG_TOPIC CONFIG_MQTT_DEVICE_TYPE"/"CONFIG_MQTT_CLIENT_ID"/cfg/scheduler/"
 
 const char *SUBSCRIPTIONS[NB_SUBSCRIPTIONS] =
   {
@@ -179,64 +161,6 @@ unsigned char get_topic_id(esp_mqtt_event_handle_t event, int maxTopics, const c
   return topicId;
 }
 
-bool handle_scheduler_mqtt_event(esp_mqtt_event_handle_t event)
-{
-#ifdef CONFIG_MQTT_SCHEDULERS
-  unsigned char schedulerId = get_topic_id(event, MAX_SCHEDULER_NB, SCHEDULER_CFG_TOPIC);
-
-  if (schedulerId != JSON_BAD_TOPIC_ID) {
-    if (event->data_len >= MAX_MQTT_DATA_SCHEDULER) {
-      ESP_LOGI(TAG, "unexpected scheduler cfg payload length");
-      return true;
-    }
-    struct SchedulerCfgMessage s = {0, 0, 0, 0, {{0}}};
-    s.schedulerId = schedulerId;
-
-    char tmpBuf[MAX_MQTT_DATA_SCHEDULER];
-    memcpy(tmpBuf, event->data, event->data_len);
-    tmpBuf[event->data_len] = 0;
-    cJSON * root   = cJSON_Parse(tmpBuf);
-    if (root) {
-      cJSON * timestamp = cJSON_GetObjectItem(root,"ts");
-      if (timestamp) {
-        s.timestamp = timestamp->valueint;
-      }
-      cJSON * actionId = cJSON_GetObjectItem(root,"aId");
-      if (actionId) {
-        s.actionId = actionId->valueint;
-      }
-      cJSON * actionState = cJSON_GetObjectItem(root,"aState");
-      if (actionState) {
-        s.actionState = actionState->valueint;
-      }
-      cJSON * data = cJSON_GetObjectItem(root,"data");
-      if (data) {
-        if (s.actionId == ADD_RELAY_ACTION) {
-          cJSON * relayId = cJSON_GetObjectItem(data,"relayId");
-          if (relayId) {
-            s.data.relayActionData.relayId = relayId->valueint;
-          }
-          cJSON * relayValue = cJSON_GetObjectItem(data,"relayValue");
-          if (relayValue) {
-            s.data.relayActionData.data = relayValue->valueint;
-          }
-        }
-      }
-      cJSON_Delete(root);
-
-      if (xQueueSend(schedulerCfgQueue
-                     ,( void * )&s
-                     ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
-        ESP_LOGE(TAG, "Cannot send to scheduleCfgQueue");
-      }
-    }
-    return true;
-  }
-#endif // CONFIG_MQTT_SCHEDULERS
-  return false;
-}
-
-
 bool handle_ota_mqtt_event(esp_mqtt_event_handle_t event)
 {
 #ifdef CONFIG_MQTT_OTA
@@ -254,195 +178,6 @@ bool handle_ota_mqtt_event(esp_mqtt_event_handle_t event)
   return false;
 }
 
-char* getToken(char* buffer, const char* topic, int topic_len, unsigned char place)
-{
-  if (topic == NULL)
-    return NULL;
-
-  if (topic_len >= 64)
-    return NULL;
-
-  char str[64];
-  memcpy(str, topic, topic_len);
-  str[topic_len] = 0;
-
-  char *token = strtok(str, "/");
-  int i = 0;
-  while(i < place && token) {
-    token = strtok(NULL, "/");
-    i += 1;
-  }
-  if (!token)
-    return NULL;
-
-  return strcpy(buffer, token);
-}
-
-char* getActionType(char* actionType, const char* topic, int topic_len)
-{
-  return getToken(actionType, topic, topic_len, 2);
-}
-char* getAction(char* action, const char* topic, int topic_len)
-{
-  return getToken(action, topic, topic_len, 3);
-}
-
-char* getService(char* service, const char* topic, int topic_len)
-{
-  return getToken(service, topic, topic_len, 4);
-}
-
-signed char getServiceId(const char* topic, int topic_len)
-{
-  signed char serviceId=-1;
-  char buffer[8];
-  char* s = getToken(buffer, topic, topic_len, 5);
-  if (s) {
-    serviceId = atoi(s);
-  }
-  return serviceId;
-}
-
-#if CONFIG_MQTT_THERMOSTATS_NB > 0
-
-void handle_thermostat_mqtt_mode_cmd(signed char thermostatId, const char *payload)
-{
-
-  struct ThermostatMessage tm;
-  memset(&tm, 0, sizeof(struct ThermostatMessage));
-  tm.msgType = THERMOSTAT_CMD_MODE;
-  tm.thermostatId = thermostatId;
-  if (strcmp(payload, "heat") == 0)
-    tm.data.thermostatMode = THERMOSTAT_MODE_HEAT;
-  else if (strcmp(payload, "off") == 0)
-    tm.data.thermostatMode = THERMOSTAT_MODE_OFF;
-
-  if (tm.data.thermostatMode == THERMOSTAT_MODE_UNSET) {
-    ESP_LOGE(TAG, "wrong payload");
-    return;
-  }
-
-  if (xQueueSend( thermostatQueue
-                  ,( void * )&tm
-                  ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
-    ESP_LOGE(TAG, "Cannot send to thermostatQueue");
-  }
-}
-
-void handle_thermostat_mqtt_temp_cmd(signed char thermostatId, const char *payload)
-{
-  struct ThermostatMessage tm;
-  memset(&tm, 0, sizeof(struct ThermostatMessage));
-  tm.msgType = THERMOSTAT_CMD_TARGET_TEMPERATURE;
-  tm.thermostatId = thermostatId;
-  tm.data.targetTemperature = atof(payload) * 10;
-
-  if (xQueueSend( thermostatQueue
-                  ,( void * )&tm
-                  ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
-    ESP_LOGE(TAG, "Cannot send to thermostatQueue");
-  }
-}
-
-void handle_thermostat_mqtt_tolerance_cmd(signed char thermostatId, const char *payload)
-{
-  struct ThermostatMessage tm;
-  memset(&tm, 0, sizeof(struct ThermostatMessage));
-  tm.msgType = THERMOSTAT_CMD_TOLERANCE;
-  tm.thermostatId = thermostatId;
-  tm.data.tolerance = atof(payload) * 10;
-
-  if (xQueueSend( thermostatQueue
-                  ,( void * )&tm
-                  ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
-    ESP_LOGE(TAG, "Cannot send to thermostatQueue");
-  }
-}
-
-void handle_thermostat_mqtt_cmd(const char* topic, int topic_len, const char* payload)
-{
-  char action[16];
-  getAction(action, topic, topic_len);
-  signed char thermostatId = getServiceId(topic, topic_len);
-  if (thermostatId != -1) {
-    if (strcmp(action, "mode") == 0) {
-      handle_thermostat_mqtt_mode_cmd(thermostatId, payload);
-      return;
-    }
-    if (strcmp(action, "temp") == 0) {
-      handle_thermostat_mqtt_temp_cmd(thermostatId, payload);
-      return;
-    }
-    if (strcmp(action, "tolerance") == 0) {
-      handle_thermostat_mqtt_tolerance_cmd(thermostatId, payload);
-      return;
-    }
-  }
-  ESP_LOGW(TAG, "unhandled water thermostat: %s", action);
-}
-
-#endif // CONFIG_MQTT_THERMOSTATS_NB > 0
-
-#if CONFIG_MQTT_RELAYS_NB
-
-void handle_relay_mqtt_status_cmd(signed char relayId, const char *payload)
-{
-  struct RelayMessage rm;
-  memset(&rm, 0, sizeof(struct RelayMessage));
-  rm.msgType = RELAY_CMD_STATUS;
-  rm.relayId = relayId;
-
-  if (strcmp(payload, "ON") == 0)
-    rm.data = RELAY_STATUS_ON;
-  else if (strcmp(payload, "OFF") == 0)
-    rm.data = RELAY_STATUS_OFF;
-
-  if (xQueueSend( relayQueue
-                  ,( void * )&rm
-                  ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
-    ESP_LOGE(TAG, "Cannot send to relayQueue");
-  }
-}
-
-void handle_relay_mqtt_sleep_cmd(signed char relayId, const char *payload)
-{
-  struct RelayMessage rm;
-  memset(&rm, 0, sizeof(struct RelayMessage));
-  rm.msgType = RELAY_CMD_SLEEP;
-  rm.relayId = relayId;
-
-  rm.data = atoi(payload);
-
-  if (xQueueSend( relayQueue
-                  ,( void * )&rm
-                  ,MQTT_QUEUE_TIMEOUT) != pdPASS) {
-    ESP_LOGE(TAG, "Cannot send to relayQueue");
-  }
-}
-
-
-void handle_relay_mqtt_cmd(const char* topic, int topic_len, const char* payload)
-{
-  char action[16];
-  getAction(action, topic, topic_len);
-
-  signed char relayId = getServiceId(topic, topic_len);
-  if (relayId != -1) {
-    if (strcmp(action, "status") == 0) {
-      handle_relay_mqtt_status_cmd(relayId, payload);
-      return;
-    }
-    if (strcmp(action, "sleep") == 0) {
-      handle_relay_mqtt_sleep_cmd(relayId, payload);
-      return;
-    }
-    ESP_LOGW(TAG, "unhandled relay action: %s", action);
-    return;
-  }
-  ESP_LOGW(TAG, "unhandled relay id: %d", relayId);
-}
-
-#endif // CONFIG_MQTT_RELAYS_NB
 
 #if CONFIG_MQTT_THERMOSTATS_MQTT_SENSORS > 0
 void thermostat_publish_data(int thermostat_id, const char * payload)
@@ -462,7 +197,7 @@ void thermostat_publish_data(int thermostat_id, const char * payload)
 
 bool handleThermostatMqttSensor(esp_mqtt_event_handle_t event)
 {
-  char payload[16];
+  char payload[MAX_MQTT_PAYLOAD_SIZE];
   memcpy(payload, event->data, event->data_len);
   payload[event->data_len] = 0;
 
@@ -499,51 +234,72 @@ bool handleThermostatMqttSensor(esp_mqtt_event_handle_t event)
 #endif // CONFIG_MQTT_THERMOSTATS_MQTT_SENSORS > 0
 
 
-void dispatch_mqtt_event(esp_mqtt_event_handle_t event)
+void handle_local_mqtt_msg(esp_mqtt_event_handle_t event)
 {
-  //FIXME this check should be generic and 16 should get a define
-  if (event->data_len > 16 - 1) { //including '\0'
-    ESP_LOGE(TAG, "payload to big");
+  if (handle_ota_mqtt_event(event))
     return;
-  }
-#if CONFIG_MQTT_THERMOSTATS_MQTT_SENSORS > 0
-  if (handleThermostatMqttSensor(event)){
-    return;
-  }
-#endif // CONFIG_MQTT_THERMOSTATS_MQTT_SENSORS > 0
 
+  // ^^^ old mqtt actions
+  //=====================
+  // vvv new mqtt actions
+
+  char all_topic[64];
+  memcpy(all_topic, event->topic, event->topic_len);
+  all_topic[event->topic_len] = 0;
+  
+  char *topic = strstr(all_topic, "/");
+  topic++;
+  topic = strstr(topic, "/");
+  topic++;
+  
   char actionType[16];
-  getActionType(actionType, event->topic, event->topic_len);
-
-  if (getActionType(actionType, event->topic, event->topic_len) && strcmp(actionType, "cmd") == 0) {
-    char payload[16];
+  if (getActionType(actionType, topic) && strcmp(actionType, "cmd") == 0) {
+    char payload[MAX_MQTT_PAYLOAD_SIZE];
 
     memcpy(payload, event->data, event->data_len);
     payload[event->data_len] = 0;
 
     char service[16];
-    getService(service, event->topic, event->topic_len);
+    getService(service, topic);
 
 #if CONFIG_MQTT_THERMOSTATS_NB > 0
     if (strcmp(service, "thermostat") == 0) {
-      handle_thermostat_mqtt_cmd(event->topic, event->topic_len, payload);
+      handle_thermostat_mqtt_cmd(topic, payload);
       return;
     }
 #endif //CONFIG_MQTT_THERMOSTATS_NB > 0
 
 #if CONFIG_MQTT_RELAYS_NB
     if (strcmp(service, "relay") == 0) {
-      handle_relay_mqtt_cmd(event->topic, event->topic_len, payload);
+      handle_relay_mqtt_cmd(topic, payload);
       return;
     }
 #endif // CONFIG_MQTT_RELAYS_NB
 
+#ifdef CONFIG_MQTT_SCHEDULERS
+    if (strcmp(service, "scheduler") == 0) {
+      handle_scheduler_mqtt_cmd(topic, payload);
+      return;
+    }
+#endif // CONFIG_MQTT_SCHEDULERS
   }
 
-  if (handle_scheduler_mqtt_event(event))
+}
+
+
+void dispatch_mqtt_event(esp_mqtt_event_handle_t event)
+{
+  //including '\0'
+  if (event->data_len > (MAX_MQTT_PAYLOAD_SIZE - 1)) {
+    ESP_LOGE(TAG, "Payload is too big");
+    return ;
+  }
+#if CONFIG_MQTT_THERMOSTATS_MQTT_SENSORS > 0
+  if (handleThermostatMqttSensor(event)){
     return;
-  if (handle_ota_mqtt_event(event))
-    return;
+  }
+#endif // CONFIG_MQTT_THERMOSTATS_MQTT_SENSORS > 0
+  handle_local_mqtt_msg(event);
 }
 
 void mqtt_publish_data(const char * topic,
@@ -695,7 +451,6 @@ void handle_mqtt_sub_pub(void* pvParameters)
   while(1) {
     if( xQueueReceive( mqttQueue, &unused , portMAX_DELAY) )
       {
-        xEventGroupClearBits(mqtt_event_group, MQTT_INIT_FINISHED_BIT);
         mqtt_subscribe(client);
         xEventGroupSetBits(mqtt_event_group, MQTT_INIT_FINISHED_BIT);
         xEventGroupSetBits(mqtt_event_group, MQTT_PUBLISHING_BIT);
@@ -708,6 +463,9 @@ void handle_mqtt_sub_pub(void* pvParameters)
 #if CONFIG_MQTT_THERMOSTATS_NB > 0
         publish_thermostat_data();
 #endif // CONFIG_MQTT_THERMOSTATS_NB > 0
+#if CONFIG_MQTT_SCHEDULERS > 0
+        publish_scheduler_data();
+#endif // CONFIG_MQTT_SCHEDULERS
 #ifdef CONFIG_MQTT_OTA
         publish_ota_data(OTA_READY);
 #endif //CONFIG_MQTT_OTA

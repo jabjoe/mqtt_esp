@@ -9,6 +9,9 @@
 #define JSON_BAD_RELAY_VALUE 255
 #define JSON_BAD_TOPIC_ID 255
 
+#define MAX_MQTT_PAYLOAD_SIZE 128
+
+
 void mqtt_init_and_start();
 void handle_mqtt_sub_pub(void* pvParameters);
 
@@ -29,6 +32,14 @@ void mqtt_publish_data(const char * topic,
                        int qos, int retain);
 
 
+//thermostat
+void handle_thermostat_mqtt_cmd(const char* topic, const char* payload);
+
+//relay
+void handle_relay_mqtt_cmd(const char* topic, const char* payload);
+
+//scheduler
+void handle_scheduler_mqtt_cmd(const char* topic, const char* payload);
 
 
 #endif /* APP_MQTT_H */

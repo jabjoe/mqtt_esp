@@ -25,7 +25,6 @@ enum HeatingState heatingState = HEATING_STATE_IDLE;
 unsigned int heatingDuration = 0;
 int circuitThermostatId = -1;
 
-
 enum ThermostatMode thermostatMode[CONFIG_MQTT_THERMOSTATS_NB] = {
   THERMOSTAT_MODE_UNSET,
 #if CONFIG_MQTT_THERMOSTATS_NB > 1
