@@ -123,11 +123,11 @@ void app_main(void)
   wifi_event_group = xEventGroupCreate();
 
 #if CONFIG_MQTT_THERMOSTATS_NB > 0
-  thermostatQueue = xQueueCreate(3, sizeof(struct ThermostatMessage) );
+  thermostatQueue = xQueueCreate(4, sizeof(struct ThermostatMessage) );
 #endif // CONFIG_MQTT_THERMOSTATS_NB > 0
 
 #if CONFIG_MQTT_RELAYS_NB
-  relayQueue = xQueueCreate(32, sizeof(struct RelayMessage) );
+  relayQueue = xQueueCreate(8, sizeof(struct RelayMessage) );
 #endif //CONFIG_MQTT_RELAYS_NB
 
 #ifdef CONFIG_MQTT_SCHEDULERS
@@ -206,7 +206,7 @@ void app_main(void)
 #endif // CONFIG_MQTT_OPS
 
 #ifdef CONFIG_MQTT_SCHEDULERS
-    xTaskCreate(handle_scheduler, "handle_scheduler", configMINIMAL_STACK_SIZE * 3, NULL, 5, NULL);
+    xTaskCreate(handle_scheduler, "handle_scheduler", configMINIMAL_STACK_SIZE * 7, NULL, 5, NULL);
 #endif // CONFIG_MQTT_SCHEDULERS
 
   }
