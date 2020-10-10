@@ -498,7 +498,7 @@ bool tooHot(char* reason)
 {
   bool tooHot = true;
   char tstr[64];
-
+  bool reasonUpdated = false;
   for(int id = 0; id < CONFIG_MQTT_THERMOSTATS_NB; id++) {
     if ((currentTemperatureFlag[id] > 0) && thermostatMode[id] == THERMOSTAT_MODE_HEAT) {
       if (thermostatType[id] == THERMOSTAT_TYPE_NORMAL) {
@@ -506,6 +506,7 @@ bool tooHot(char* reason)
           ESP_LOGI(TAG, "thermostat[%d] is hot enough", id);
           sprintf(tstr, "%s thermostat is hot enough, ", thermostatFriendlyName[id]);
           strcat(reason, tstr);
+          reasonUpdated = true;
         } else {
           tooHot = false;
           ESP_LOGI(TAG, "thermostat[%d] is not too hot", id);
@@ -516,7 +517,7 @@ bool tooHot(char* reason)
   }
   if (tooHot && strlen(reason) == 0) {
     strcat(reason, "No normal thermostat is enabled");
-  } else {
+  } else if (reasonUpdated) {
     reason[strlen(reason)-2] = 0;
   }
   return tooHot;
