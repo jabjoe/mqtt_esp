@@ -83,7 +83,7 @@ void blink_task(void *pvParameter)
   gpio_pad_select_gpio(CONFIG_MQTT_STATUS_LED_GPIO);
   gpio_set_direction(CONFIG_MQTT_STATUS_LED_GPIO, GPIO_MODE_OUTPUT);
 
-  int interval;
+  int interval=250;
   while(1) {
     EventBits_t bits;
     if(smartconfigFlag) {
